@@ -28,6 +28,7 @@ const API = {
     getStats: () => API.request('/api/dashboard/stats'),
     getRoomAvailability: () => API.request('/api/dashboard/room-availability'),
     getRecentReservations: () => API.request('/api/dashboard/recent-reservations'),
+    getRevenueAnalytics: () => API.request('/api/dashboard/revenue-analytics'),
 
     // Hotels
     getHotels: () => API.request('/api/hotels/'),
@@ -65,11 +66,13 @@ const API = {
 
     // Staff
     getStaff: () => API.request('/api/staff/'),
+    createStaff: (data) => API.request('/api/staff/', { method: 'POST', body: JSON.stringify(data) }),
     getStaffByDepartment: (deptId) => {
         const query = deptId ? `?dept_id=${deptId}` : '';
         return API.request(`/api/staff/by-department${query}`);
     },
     getStaffReservations: (id) => API.request(`/api/staff/${id}/reservations`),
+
 
     // Recommendations
     recommendHotels: (guestId) => API.request(`/api/recommendations/hotels/${guestId}`),

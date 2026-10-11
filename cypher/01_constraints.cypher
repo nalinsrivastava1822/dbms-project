@@ -12,8 +12,12 @@
 CREATE CONSTRAINT hotel_id_unique IF NOT EXISTS
 FOR (h:Hotel) REQUIRE h.hotel_id IS UNIQUE;
 
-CREATE CONSTRAINT room_no_unique IF NOT EXISTS
-FOR (r:Room) REQUIRE r.room_no IS UNIQUE;
+CREATE CONSTRAINT room_id_unique IF NOT EXISTS
+FOR (r:Room) REQUIRE r.room_id IS UNIQUE;
+
+CREATE INDEX room_no_idx IF NOT EXISTS
+FOR (r:Room) ON (r.room_no);
+
 
 CREATE CONSTRAINT category_name_unique IF NOT EXISTS
 FOR (c:RoomCategory) REQUIRE c.category_name IS UNIQUE;

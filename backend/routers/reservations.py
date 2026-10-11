@@ -31,16 +31,16 @@ def list_reservations():
         if r.get("check_out_date"):
             r["check_out_date"] = str(r["check_out_date"])
     return results
-
-
-@router.post("/")
+@router.post("/", status_code=201)
 def create_reservation(reservation: ReservationCreate):
     """
-    Create a new reservation with full validation:
-    - Check-out date must be after check-in date.
-    - Guest, room, and staff must exist.
-    - No overlapping active reservations for the same room.
-    - Uses a transaction for atomicity.
+    Create a new reservation atomically within a transaction:
+    - Check-out date must be strictly after check-in date.
+    - Resolves room by room_id or hotel room_no.
+    - Rejects room if currently under Maintenance.
+    - Rejects if Guest or Staff does not exist.
+    - Rejects if an active/confirmed booking overlaps the requested dates.
+    - Atomically creates reservation node and relationships in one transaction callback.
     """
     # 1. Validate dates
     if reservation.check_out_date <= reservation.check_in_date:
@@ -49,127 +49,141 @@ def create_reservation(reservation: ReservationCreate):
             detail="Check-out date must be after check-in date"
         )
 
-    # 2. Check duplicate reservation ID
-    dup_check = db.execute_read(
-        "MATCH (r:Reservation {res_id: $res_id}) RETURN r",
-        {"res_id": reservation.res_id}
-    )
-    if dup_check:
-        raise HTTPException(status_code=409, detail=f"Reservation {reservation.res_id} already exists")
-
-    # 3. Verify guest exists
-    guest_check = db.execute_read(
-        "MATCH (g:Guest {guest_id: $guest_id}) RETURN g",
-        {"guest_id": reservation.guest_id}
-    )
-    if not guest_check:
-        raise HTTPException(status_code=404, detail=f"Guest {reservation.guest_id} not found")
-
-    # 4. Verify room exists
-    room_check = db.execute_read(
-        "MATCH (r:Room {room_no: $room_no}) RETURN r",
-        {"room_no": reservation.room_no}
-    )
-    if not room_check:
-        raise HTTPException(status_code=404, detail=f"Room {reservation.room_no} not found")
-
-    # 5. Verify staff exists
-    staff_check = db.execute_read(
-        "MATCH (s:Staff {staff_id: $staff_id}) RETURN s",
-        {"staff_id": reservation.staff_id}
-    )
-    if not staff_check:
-        raise HTTPException(status_code=404, detail=f"Staff {reservation.staff_id} not found")
-
-    # 6. Check for overlapping active reservations on the same room
-    overlap_check = db.execute_read(
-        """
-        MATCH (res:Reservation)-[:BOOKS]->(r:Room {room_no: $room_no})
-        WHERE res.status IN ['Active', 'Confirmed']
-          AND res.check_in_date < date($check_out)
-          AND res.check_out_date > date($check_in)
-        RETURN res.res_id AS conflicting_reservation
-        """,
-        {
-            "room_no": reservation.room_no,
-            "check_in": str(reservation.check_in_date),
-            "check_out": str(reservation.check_out_date),
-        }
-    )
-    if overlap_check:
-        conflicting = overlap_check[0]["conflicting_reservation"]
+    if not reservation.room_id and not reservation.room_no:
         raise HTTPException(
-            status_code=409,
-            detail=f"Room {reservation.room_no} has an overlapping reservation ({conflicting}) "
-                   f"during the requested dates"
+            status_code=400,
+            detail="Either room_id or room_no must be provided"
         )
 
-    # 7. Create reservation in a transaction
-    query = """
-    MATCH (g:Guest {guest_id: $guest_id})
-    MATCH (r:Room {room_no: $room_no})
-    MATCH (s:Staff {staff_id: $staff_id})
-    CREATE (res:Reservation {
-        res_id: $res_id,
-        check_in_date: date($check_in),
-        check_out_date: date($check_out),
-        status: 'Confirmed'
-    })
-    MERGE (g)-[:MADE]->(res)
-    MERGE (res)-[:BOOKS]->(r)
-    MERGE (s)-[:PROCESSES]->(res)
-    SET r.status = CASE
-        WHEN date($check_in) <= date() AND date($check_out) >= date() THEN 'Occupied'
-        ELSE r.status
-    END
-    RETURN res.res_id AS res_id, res.status AS status,
-           g.name AS guest_name, r.room_no AS room_no, s.name AS staff_name
-    """
-    result = db.execute_write(query, {
+    payload = {
         "res_id": reservation.res_id,
         "guest_id": reservation.guest_id,
+        "room_id": reservation.room_id,
         "room_no": reservation.room_no,
         "staff_id": reservation.staff_id,
         "check_in": str(reservation.check_in_date),
         "check_out": str(reservation.check_out_date),
-    })
-    return result[0] if result else {"message": "Reservation created"}
+    }
+
+    def _atomic_booking_tx(tx):
+        # A. Check duplicate reservation ID
+        dup = tx.run(
+            "MATCH (r:Reservation {res_id: $res_id}) RETURN r.res_id AS res_id",
+            {"res_id": payload["res_id"]}
+        ).single()
+        if dup:
+            raise HTTPException(status_code=409, detail=f"Reservation {payload['res_id']} already exists")
+
+        # B. Verify guest exists
+        guest = tx.run(
+            "MATCH (g:Guest {guest_id: $guest_id}) RETURN g.name AS name",
+            {"guest_id": payload["guest_id"]}
+        ).single()
+        if not guest:
+            raise HTTPException(status_code=404, detail=f"Guest {payload['guest_id']} not found")
+
+        # C. Verify room exists and check maintenance status
+        room_query = """
+        MATCH (r:Room)
+        WHERE ($room_id IS NOT NULL AND r.room_id = $room_id)
+           OR ($room_id IS NULL AND r.room_no = $room_no)
+        RETURN r.room_id AS room_id, r.room_no AS room_no, r.status AS status
+        """
+        room = tx.run(room_query, {"room_id": payload["room_id"], "room_no": payload["room_no"]}).single()
+        if not room:
+            id_val = payload["room_id"] or payload["room_no"]
+            raise HTTPException(status_code=404, detail=f"Room {id_val} not found")
+
+        if room.get("status") == "Maintenance":
+            raise HTTPException(
+                status_code=400,
+                detail=f"Room {room['room_no']} is currently under maintenance and cannot be booked"
+            )
+
+        # D. Verify staff exists
+        staff = tx.run(
+            "MATCH (s:Staff {staff_id: $staff_id}) RETURN s.name AS name",
+            {"staff_id": payload["staff_id"]}
+        ).single()
+        if not staff:
+            raise HTTPException(status_code=404, detail=f"Staff {payload['staff_id']} not found")
+
+        # E. Check for overlapping active reservations on the same room
+        overlap_query = """
+        MATCH (res:Reservation)-[:BOOKS]->(r:Room)
+        WHERE (($room_id IS NOT NULL AND r.room_id = $room_id) OR ($room_id IS NULL AND r.room_no = $room_no))
+          AND res.status IN ['Active', 'Confirmed']
+          AND res.check_in_date < date($check_out)
+          AND res.check_out_date > date($check_in)
+        RETURN res.res_id AS conflicting_reservation
+        """
+        overlap = tx.run(overlap_query, {
+            "room_id": payload["room_id"],
+            "room_no": payload["room_no"],
+            "check_in": payload["check_in"],
+            "check_out": payload["check_out"],
+        }).single()
+        if overlap:
+            raise HTTPException(
+                status_code=409,
+                detail=f"Room {room['room_no']} has an overlapping reservation ({overlap['conflicting_reservation']}) during requested dates"
+            )
+
+        # F. Create reservation and relationships atomically
+        create_query = """
+        MATCH (g:Guest {guest_id: $guest_id})
+        MATCH (r:Room) WHERE ($room_id IS NOT NULL AND r.room_id = $room_id) OR ($room_id IS NULL AND r.room_no = $room_no)
+        MATCH (s:Staff {staff_id: $staff_id})
+        CREATE (res:Reservation {
+            res_id: $res_id,
+            check_in_date: date($check_in),
+            check_out_date: date($check_out),
+            status: 'Confirmed'
+        })
+        MERGE (g)-[:MADE]->(res)
+        MERGE (res)-[:BOOKS]->(r)
+        MERGE (s)-[:PROCESSES]->(res)
+        RETURN res.res_id AS res_id, res.status AS status,
+               g.name AS guest_name, coalesce(r.room_id, 'RM' + toString(r.room_no)) AS room_id,
+               r.room_no AS room_no, s.name AS staff_name
+        """
+        record = tx.run(create_query, payload).single()
+        return dict(record) if record else {"res_id": payload["res_id"], "status": "Confirmed"}
+
+    return db.run_write_transaction(_atomic_booking_tx)
 
 
 @router.post("/{res_id}/cancel")
 def cancel_reservation(res_id: str):
     """
-    Cancel a reservation and update room availability.
-    Uses a transaction for consistency.
+    Cancel a reservation atomically.
+    Cancelled reservations no longer block future date availability.
+    Physical maintenance status of the room is preserved.
     """
-    # Check reservation exists and is cancellable
-    res_check = db.execute_read(
-        "MATCH (res:Reservation {res_id: $res_id}) RETURN res.status AS status",
-        {"res_id": res_id}
-    )
-    if not res_check:
-        raise HTTPException(status_code=404, detail=f"Reservation {res_id} not found")
+    def _cancel_tx(tx):
+        res = tx.run(
+            "MATCH (res:Reservation {res_id: $res_id}) RETURN res.status AS status",
+            {"res_id": res_id}
+        ).single()
+        if not res:
+            raise HTTPException(status_code=404, detail=f"Reservation {res_id} not found")
 
-    current_status = res_check[0]["status"]
-    if current_status == "Cancelled":
-        raise HTTPException(status_code=400, detail="Reservation is already cancelled")
-    if current_status == "Completed":
-        raise HTTPException(status_code=400, detail="Cannot cancel a completed reservation")
+        current_status = res["status"]
+        if current_status == "Cancelled":
+            raise HTTPException(status_code=400, detail="Reservation is already cancelled")
+        if current_status == "Completed":
+            raise HTTPException(status_code=400, detail="Cannot cancel a completed reservation")
 
-    # Cancel reservation and update room status in one transaction
-    query = """
-    MATCH (res:Reservation {res_id: $res_id})-[:BOOKS]->(r:Room)
-    SET res.status = 'Cancelled'
-    WITH r
-    OPTIONAL MATCH (other:Reservation)-[:BOOKS]->(r)
-    WHERE other.status IN ['Active', 'Confirmed']
-      AND other.check_in_date <= date() AND other.check_out_date >= date()
-    WITH r, COUNT(other) AS activeBookings
-    SET r.status = CASE WHEN activeBookings = 0 THEN 'Available' ELSE r.status END
-    RETURN r.room_no AS room_no, r.status AS room_status
-    """
-    result = db.execute_write(query, {"res_id": res_id})
-    return {
-        "message": f"Reservation {res_id} cancelled",
-        "room_update": result[0] if result else None
-    }
+        query = """
+        MATCH (res:Reservation {res_id: $res_id})-[:BOOKS]->(r:Room)
+        SET res.status = 'Cancelled'
+        RETURN res.res_id AS res_id, res.status AS status, r.room_no AS room_no, r.status AS room_status
+        """
+        result = tx.run(query, {"res_id": res_id}).single()
+        return {
+            "message": f"Reservation {res_id} cancelled",
+            "reservation": dict(result) if result else {"res_id": res_id, "status": "Cancelled"}
+        }
+
+    return db.run_write_transaction(_cancel_tx)
+

@@ -94,6 +94,19 @@ class Neo4jConnection:
         else:
             return mock_store.execute(query, parameters)
 
+    def run_write_transaction(self, tx_func):
+        """Execute a multi-step transaction callback atomically with write locks."""
+        if self._connected and self._driver:
+            try:
+                with self.get_session() as session:
+                    return session.execute_write(tx_func)
+            except Exception as e:
+                print(f"[WARN] Live write tx failed ({e}), falling back to simulator.")
+                return mock_store.run_transaction(tx_func)
+        else:
+            return mock_store.run_transaction(tx_func)
+
+
 
 # Singleton instance
 db = Neo4jConnection()

@@ -36,11 +36,26 @@ MATCH (h:Hotel)-[:HAS_ROOM]->(r:Room)-[:BELONGS_TO]->(c:RoomCategory)
 RETURN h.name AS Hotel, ROUND(AVG(c.rent)) AS AvgRent
 ORDER BY AvgRent DESC;
 
-// --- 6. Aggregation: Total potential revenue per hotel (all rooms) ---
-// Expected: Sum of rents for all rooms in each hotel.
+// --- 6. Aggregation: Total potential daily capacity revenue per hotel (all rooms) ---
+// Expected: Sum of rents for all rooms in each hotel if 100% capacity is reached.
 MATCH (h:Hotel)-[:HAS_ROOM]->(r:Room)-[:BELONGS_TO]->(c:RoomCategory)
-RETURN h.name AS Hotel, SUM(c.rent) AS TotalDailyRevenue
-ORDER BY TotalDailyRevenue DESC;
+RETURN h.name AS Hotel, SUM(c.rent) AS TotalDailyCapacityRevenue
+ORDER BY TotalDailyCapacityRevenue DESC;
+
+// --- 6b. Aggregation: Realized booking revenue per hotel (from confirmed reservations) ---
+// Explicitly separates room inventory pricing from reservation-level revenue to avoid duplication.
+MATCH (h:Hotel)-[:HAS_ROOM]->(r:Room)-[:BELONGS_TO]->(rc:RoomCategory)
+WITH h, count(r) AS total_rooms, sum(rc.rent) AS potential_daily_revenue, collect(r) AS rooms
+OPTIONAL MATCH (res:Reservation)-[:BOOKS]->(r:Room)
+WHERE r IN rooms AND res.status IN ['Active', 'Confirmed', 'Completed']
+OPTIONAL MATCH (r)-[:BELONGS_TO]->(rc:RoomCategory)
+RETURN h.name AS Hotel,
+       total_rooms AS TotalRooms,
+       potential_daily_revenue AS PotentialDailyCapacityRevenue,
+       count(DISTINCT res) AS TotalBookings,
+       coalesce(sum(rc.rent * duration.inDays(res.check_in_date, res.check_out_date).days), 0) AS TotalBookedRevenue
+ORDER BY TotalBookedRevenue DESC;
+
 
 // --- 7. Aggregation: Staff count per department ---
 // Expected: Count of staff in each department.

@@ -2,12 +2,49 @@
 In-Memory Graph Store & Query Evaluator.
 Acts as a seamless fallback / simulator when a live Neo4j instance is not running.
 Pre-populated with the exact same 7 entities and relationships from the Cypher seed script.
+Supports thread-safe atomic transactions, room_id identifiers, and date-based availability.
 """
 from datetime import date
+import threading
+
+
+class MockRecord(dict):
+    def __getitem__(self, key):
+        return super().get(key)
+
+    def get(self, key, default=None):
+        return super().get(key, default)
+
+    def data(self):
+        return dict(self)
+
+
+class MockResult:
+    def __init__(self, records):
+        self._records = [MockRecord(r) for r in (records or [])]
+
+    def single(self):
+        return self._records[0] if self._records else None
+
+    def data(self):
+        return [r.data() for r in self._records]
+
+    def __iter__(self):
+        return iter(self._records)
+
+
+class MockTx:
+    def __init__(self, store):
+        self.store = store
+
+    def run(self, query, params=None):
+        raw = self.store._execute_unlocked(query, params or {})
+        return MockResult(raw)
 
 
 class MockGraphStore:
     def __init__(self):
+        self._lock = threading.Lock()
         self.reset()
 
     def reset(self):
@@ -25,18 +62,18 @@ class MockGraphStore:
         }
 
         self.rooms = {
-            101: {"room_no": 101, "status": "Available", "hotel_id": "H001", "category_name": "Standard"},
-            102: {"room_no": 102, "status": "Available", "hotel_id": "H001", "category_name": "Deluxe"},
-            103: {"room_no": 103, "status": "Occupied", "hotel_id": "H001", "category_name": "Suite"},
-            104: {"room_no": 104, "status": "Available", "hotel_id": "H001", "category_name": "Executive"},
-            105: {"room_no": 105, "status": "Maintenance", "hotel_id": "H001", "category_name": "Standard"},
-            201: {"room_no": 201, "status": "Available", "hotel_id": "H002", "category_name": "Standard"},
-            202: {"room_no": 202, "status": "Occupied", "hotel_id": "H002", "category_name": "Deluxe"},
-            203: {"room_no": 203, "status": "Available", "hotel_id": "H002", "category_name": "Suite"},
-            204: {"room_no": 204, "status": "Available", "hotel_id": "H002", "category_name": "Executive"},
-            301: {"room_no": 301, "status": "Available", "hotel_id": "H003", "category_name": "Standard"},
-            302: {"room_no": 302, "status": "Occupied", "hotel_id": "H003", "category_name": "Deluxe"},
-            303: {"room_no": 303, "status": "Available", "hotel_id": "H003", "category_name": "Suite"},
+            101: {"room_id": "RM101", "room_no": 101, "status": "Available", "hotel_id": "H001", "category_name": "Standard"},
+            102: {"room_id": "RM102", "room_no": 102, "status": "Available", "hotel_id": "H001", "category_name": "Deluxe"},
+            103: {"room_id": "RM103", "room_no": 103, "status": "Available", "hotel_id": "H001", "category_name": "Suite"},
+            104: {"room_id": "RM104", "room_no": 104, "status": "Available", "hotel_id": "H001", "category_name": "Executive"},
+            105: {"room_id": "RM105", "room_no": 105, "status": "Maintenance", "hotel_id": "H001", "category_name": "Standard"},
+            201: {"room_id": "RM201", "room_no": 201, "status": "Available", "hotel_id": "H002", "category_name": "Standard"},
+            202: {"room_id": "RM202", "room_no": 202, "status": "Available", "hotel_id": "H002", "category_name": "Deluxe"},
+            203: {"room_id": "RM203", "room_no": 203, "status": "Available", "hotel_id": "H002", "category_name": "Suite"},
+            204: {"room_id": "RM204", "room_no": 204, "status": "Available", "hotel_id": "H002", "category_name": "Executive"},
+            301: {"room_id": "RM301", "room_no": 301, "status": "Available", "hotel_id": "H003", "category_name": "Standard"},
+            302: {"room_id": "RM302", "room_no": 302, "status": "Available", "hotel_id": "H003", "category_name": "Deluxe"},
+            303: {"room_id": "RM303", "room_no": 303, "status": "Available", "hotel_id": "H003", "category_name": "Suite"},
         }
 
         self.departments = {
@@ -68,18 +105,36 @@ class MockGraphStore:
         }
 
         self.reservations = {
-            "R001": {"res_id": "R001", "check_in_date": "2026-10-10", "check_out_date": "2026-10-15", "status": "Active", "guest_id": "G001", "room_no": 103, "staff_id": "S001"},
-            "R002": {"res_id": "R002", "check_in_date": "2026-10-09", "check_out_date": "2026-10-13", "status": "Active", "guest_id": "G002", "room_no": 202, "staff_id": "S004"},
-            "R003": {"res_id": "R003", "check_in_date": "2026-10-11", "check_out_date": "2026-10-14", "status": "Active", "guest_id": "G003", "room_no": 302, "staff_id": "S006"},
-            "R004": {"res_id": "R004", "check_in_date": "2026-09-01", "check_out_date": "2026-09-05", "status": "Completed", "guest_id": "G001", "room_no": 101, "staff_id": "S001"},
-            "R005": {"res_id": "R005", "check_in_date": "2026-09-10", "check_out_date": "2026-09-14", "status": "Completed", "guest_id": "G004", "room_no": 201, "staff_id": "S004"},
-            "R006": {"res_id": "R006", "check_in_date": "2026-09-15", "check_out_date": "2026-09-20", "status": "Completed", "guest_id": "G002", "room_no": 102, "staff_id": "S002"},
-            "R007": {"res_id": "R007", "check_in_date": "2026-08-20", "check_out_date": "2026-08-25", "status": "Completed", "guest_id": "G005", "room_no": 301, "staff_id": "S006"},
-            "R008": {"res_id": "R008", "check_in_date": "2026-10-20", "check_out_date": "2026-10-25", "status": "Cancelled", "guest_id": "G006", "room_no": 104, "staff_id": "S001"},
-            "R009": {"res_id": "R009", "check_in_date": "2026-11-01", "check_out_date": "2026-11-05", "status": "Confirmed", "guest_id": "G007", "room_no": 203, "staff_id": "S004"},
+            "R001": {"res_id": "R001", "check_in_date": "2026-10-10", "check_out_date": "2026-10-15", "status": "Active", "guest_id": "G001", "room_id": "RM103", "room_no": 103, "staff_id": "S001"},
+            "R002": {"res_id": "R002", "check_in_date": "2026-10-09", "check_out_date": "2026-10-13", "status": "Active", "guest_id": "G002", "room_id": "RM202", "room_no": 202, "staff_id": "S004"},
+            "R003": {"res_id": "R003", "check_in_date": "2026-10-11", "check_out_date": "2026-10-14", "status": "Active", "guest_id": "G003", "room_id": "RM302", "room_no": 302, "staff_id": "S006"},
+            "R004": {"res_id": "R004", "check_in_date": "2026-09-01", "check_out_date": "2026-09-05", "status": "Completed", "guest_id": "G001", "room_id": "RM101", "room_no": 101, "staff_id": "S001"},
+            "R005": {"res_id": "R005", "check_in_date": "2026-09-10", "check_out_date": "2026-09-14", "status": "Completed", "guest_id": "G004", "room_id": "RM201", "room_no": 201, "staff_id": "S004"},
+            "R006": {"res_id": "R006", "check_in_date": "2026-09-15", "check_out_date": "2026-09-20", "status": "Completed", "guest_id": "G002", "room_id": "RM102", "room_no": 102, "staff_id": "S002"},
+            "R007": {"res_id": "R007", "check_in_date": "2026-08-20", "check_out_date": "2026-08-25", "status": "Completed", "guest_id": "G005", "room_id": "RM301", "room_no": 301, "staff_id": "S006"},
+            "R008": {"res_id": "R008", "check_in_date": "2026-10-20", "check_out_date": "2026-10-25", "status": "Cancelled", "guest_id": "G006", "room_id": "RM104", "room_no": 104, "staff_id": "S001"},
+            "R009": {"res_id": "R009", "check_in_date": "2026-11-01", "check_out_date": "2026-11-05", "status": "Confirmed", "guest_id": "G007", "room_id": "RM203", "room_no": 203, "staff_id": "S004"},
         }
 
+    def _find_room(self, room_id=None, room_no=None):
+        for r in self.rooms.values():
+            if room_id and r.get("room_id") == room_id:
+                return r
+            if room_no is not None and r.get("room_no") == int(room_no):
+                return r
+        return None
+
+    def run_transaction(self, tx_func):
+        """Execute a multi-step transaction callback under mutual exclusion lock."""
+        with self._lock:
+            tx = MockTx(self)
+            return tx_func(tx)
+
     def execute(self, query: str, params: dict = None) -> list:
+        with self._lock:
+            return self._execute_unlocked(query, params)
+
+    def _execute_unlocked(self, query: str, params: dict = None) -> list:
         params = params or {}
         q = " ".join(query.strip().split())
 
@@ -87,10 +142,12 @@ class MockGraphStore:
         # 1. WRITE / MUTATION OPERATIONS (CHECK FIRST)
         # ==========================================
 
-        # A. Create Reservation (check before generic match)
+        # A. Create Reservation
         if "CREATE (res:Reservation" in q or "CREATE (res: Reservation" in q:
             res_id = params["res_id"]
-            room_no = int(params["room_no"])
+            rm = self._find_room(params.get("room_id"), params.get("room_no"))
+            r_no = rm["room_no"] if rm else int(params.get("room_no", 0))
+            r_id = rm["room_id"] if rm else f"RM{r_no}"
             c_in = str(params.get("check_in") or params.get("check_in_date"))
             c_out = str(params.get("check_out") or params.get("check_out_date"))
             self.reservations[res_id] = {
@@ -99,18 +156,18 @@ class MockGraphStore:
                 "check_out_date": c_out,
                 "status": "Confirmed",
                 "guest_id": params["guest_id"],
-                "room_no": room_no,
+                "room_id": r_id,
+                "room_no": r_no,
                 "staff_id": params["staff_id"],
             }
-            if room_no in self.rooms:
-                self.rooms[room_no]["status"] = "Occupied"
             g = self.guests.get(params["guest_id"], {})
             s = self.staff.get(params["staff_id"], {})
             return [{
                 "res_id": res_id,
                 "status": "Confirmed",
                 "guest_name": g.get("name", "Guest"),
-                "room_no": room_no,
+                "room_id": r_id,
+                "room_no": r_no,
                 "staff_name": s.get("name", "Staff"),
             }]
 
@@ -120,12 +177,29 @@ class MockGraphStore:
             if res_id not in self.reservations:
                 return []
             self.reservations[res_id]["status"] = "Cancelled"
-            room_no = self.reservations[res_id]["room_no"]
-            if room_no in self.rooms:
-                self.rooms[room_no]["status"] = "Available"
-            return [{"room_no": room_no, "room_status": "Available"}]
+            r_no = self.reservations[res_id]["room_no"]
+            rm = self._find_room(room_no=r_no)
+            return [{
+                "res_id": res_id,
+                "status": "Cancelled",
+                "room_no": r_no,
+                "room_status": rm["status"] if rm else "Available",
+            }]
 
-        # C. Create Guest
+        # C. Create Staff (New)
+        if "CREATE (s:Staff" in q or "CREATE (s: Staff" in q:
+            s_id = params["staff_id"]
+            self.staff[s_id] = {
+                "staff_id": s_id,
+                "name": params["name"],
+                "age": int(params["age"]),
+                "salary": float(params["salary"]),
+                "contact_info": params["contact_info"],
+                "dept_id": params["dept_id"],
+            }
+            return [self.staff[s_id]]
+
+        # D. Create Guest
         if "CREATE (g:Guest" in q or "CREATE (g: Guest" in q:
             g_id = params["guest_id"]
             self.guests[g_id] = {
@@ -137,10 +211,12 @@ class MockGraphStore:
             }
             return [{"guest_id": g_id, "name": params["name"]}]
 
-        # D. Create Room
+        # E. Create Room
         if "CREATE (r:Room" in q or "CREATE (r: Room" in q:
             r_no = int(params["room_no"])
+            r_id = params.get("room_id") or f"RM{r_no}"
             self.rooms[r_no] = {
+                "room_id": r_id,
                 "room_no": r_no,
                 "status": params.get("status", "Available"),
                 "hotel_id": params["hotel_id"],
@@ -148,6 +224,7 @@ class MockGraphStore:
             }
             c = self.categories.get(params["category_name"], {})
             return [{
+                "room_id": r_id,
                 "room_no": r_no,
                 "status": params.get("status", "Available"),
                 "category": params["category_name"],
@@ -155,15 +232,16 @@ class MockGraphStore:
                 "hotel_id": params["hotel_id"],
             }]
 
-        # E. Update Room Status
+        # F. Update Room Status
         if "SET r.status = $status" in q:
             r_no = int(params.get("room_no", 0))
-            if r_no in self.rooms:
-                self.rooms[r_no]["status"] = params["status"]
-                return [{"room_no": r_no, "status": params["status"]}]
+            rm = self._find_room(room_no=r_no)
+            if rm:
+                rm["status"] = params["status"]
+                return [{"room_no": rm["room_no"], "status": params["status"]}]
             return []
 
-        # F. Create Hotel
+        # G. Create Hotel
         if "CREATE (h:Hotel" in q or "CREATE (h: Hotel" in q:
             self.hotels[params["hotel_id"]] = {
                 "hotel_id": params["hotel_id"],
@@ -173,18 +251,36 @@ class MockGraphStore:
             }
             return [{"hotel": self.hotels[params["hotel_id"]]}]
 
-        # G. Check Overlapping Reservation
+        # H. Check Overlapping Reservation
         if "conflicting_reservation" in q:
-            room_no = int(params.get("room_no", 0))
+            rm = self._find_room(params.get("room_id"), params.get("room_no"))
+            if not rm:
+                return []
+            r_no = rm["room_no"]
+            r_id = rm.get("room_id")
             req_in = str(params.get("check_in"))
             req_out = str(params.get("check_out"))
             for r in self.reservations.values():
-                if int(r["room_no"]) == room_no and r["status"] in ["Active", "Confirmed"]:
+                is_same_room = (r.get("room_no") == r_no) or (r_id and r.get("room_id") == r_id)
+                if is_same_room and r["status"] in ["Active", "Confirmed"]:
                     res_in = str(r["check_in_date"])
                     res_out = str(r["check_out_date"])
                     if res_in < req_out and res_out > req_in:
                         return [{"conflicting_reservation": r["res_id"]}]
             return []
+
+        # I. Room lookup by room_id or room_no (for atomic transaction verification)
+        if "MATCH (r:Room)" in q and ("r.room_id" in q or "r.room_no" in q) and "RETURN r.room_id" in q:
+            rm = self._find_room(params.get("room_id"), params.get("room_no"))
+            if rm:
+                return [{
+                    "r": rm,
+                    "room_id": rm["room_id"],
+                    "room_no": rm["room_no"],
+                    "status": rm["status"]
+                }]
+            return []
+
 
         # ==========================================
         # 2. READ / QUERY OPERATIONS
@@ -223,8 +319,25 @@ class MockGraphStore:
             results.sort(key=lambda x: x["hotel_name"])
             return results
 
+        # Revenue analytics per hotel (separating room inventory from reservation revenue)
+        if "potential_daily_revenue" in q:
+            results = []
+            for h_id, h in sorted(self.hotels.items()):
+                h_rooms = [r for r in self.rooms.values() if r["hotel_id"] == h_id]
+                pot_rev = sum(self.categories.get(r["category_name"], {}).get("rent", 0) for r in h_rooms)
+                h_res = [res for res in self.reservations.values() if any(r["room_no"] == res.get("room_no") for r in h_rooms)]
+                results.append({
+                    "hotel_id": h_id,
+                    "hotel_name": h["name"],
+                    "total_rooms": len(h_rooms),
+                    "potential_daily_revenue": pot_rev,
+                    "total_bookings": len(h_res),
+                })
+            return results
+
         # Recent reservations
         if "LIMIT 10" in q and "res:Reservation" in q:
+
             sorted_res = sorted(self.reservations.values(), key=lambda r: str(r["check_in_date"]), reverse=True)[:10]
             results = []
             for r in sorted_res:
@@ -345,19 +458,36 @@ class MockGraphStore:
         # List Rooms or Search Rooms
         if "MATCH (h:Hotel)-[:HAS_ROOM]->(r:Room)-[:BELONGS_TO]->(c:RoomCategory)" in q:
             results = []
+            req_in = str(params.get("check_in_date") or "")
+            req_out = str(params.get("check_out_date") or "")
+
             for r_no, r in sorted(self.rooms.items()):
                 h = self.hotels.get(r["hotel_id"], {})
                 c = self.categories.get(r["category_name"], {})
-                if "hotel_id" in params and r["hotel_id"] != params["hotel_id"]:
+                if "hotel_id" in params and params["hotel_id"] and r["hotel_id"] != params["hotel_id"]:
                     continue
-                if "category" in params and r["category_name"] != params["category"]:
+                if "category" in params and params["category"] and r["category_name"] != params["category"]:
                     continue
-                if "status" in params and r["status"] != params["status"]:
+                if "status" in params and params["status"] and r["status"] != params["status"]:
                     continue
-                if "max_rent" in params and c.get("rent", 0) > params["max_rent"]:
+                if "max_rent" in params and params["max_rent"] is not None and c.get("rent", 0) > params["max_rent"]:
                     continue
 
+                # Date-based availability check
+                if req_in and req_out:
+                    if r["status"] == "Maintenance":
+                        continue
+                    has_overlap = False
+                    for res in self.reservations.values():
+                        if res["room_no"] == r["room_no"] and res["status"] in ["Active", "Confirmed"]:
+                            if str(res["check_in_date"]) < req_out and str(res["check_out_date"]) > req_in:
+                                has_overlap = True
+                                break
+                    if has_overlap:
+                        continue
+
                 results.append({
+                    "room_id": r.get("room_id", f"RM{r['room_no']}"),
                     "room_no": r["room_no"],
                     "status": r["status"],
                     "category": r["category_name"],
@@ -369,12 +499,11 @@ class MockGraphStore:
             results.sort(key=lambda x: (x.get("rent", 0), x["room_no"]))
             return results
 
-        # Check Room by room_no
-        if "MATCH (r:Room {room_no: $room_no}) RETURN r" in q:
-            r_no = int(params.get("room_no", 0))
-            if r_no in self.rooms:
-                return [{"r": self.rooms[r_no]}]
-            return []
+        # Check Room by room_no or room_id
+        if "MATCH (r:Room {room_no: $room_no}) RETURN r" in q or "MATCH (r:Room {room_id: $room_id}) RETURN r" in q:
+            rm = self._find_room(params.get("room_id"), params.get("room_no"))
+            return [{"r": rm, "room_no": rm["room_no"], "room_id": rm["room_id"]}] if rm else []
+
 
         # Check Hotel / Category existence checks
         if "MATCH (h:Hotel {hotel_id: $hotel_id}) RETURN h" in q:
@@ -462,9 +591,14 @@ class MockGraphStore:
             return []
 
         # Check Staff by ID
-        if "MATCH (s:Staff {staff_id: $staff_id}) RETURN s" in q:
+        if "MATCH (s:Staff {staff_id: $staff_id})" in q:
             s_id = params.get("staff_id")
-            return [{"s": self.staff[s_id]}] if s_id in self.staff else []
+            return [{"s": self.staff[s_id], "name": self.staff[s_id]["name"]}] if s_id in self.staff else []
+
+        # Check Department by ID
+        if "MATCH (d:Department {dept_id: $dept_id})" in q:
+            d_id = params.get("dept_id")
+            return [{"d": self.departments[d_id]}] if d_id in self.departments else []
 
         # Check Reservation status
         if "Reservation {res_id: $res_id}" in q and "status" in q.lower():

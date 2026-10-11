@@ -25,22 +25,22 @@ MERGE (c4:RoomCategory {category_name: 'Executive'})
   SET c4.rent = 7500;
 
 // --- Rooms for Grand Palace Hotel (H001) ---
-MERGE (r101:Room {room_no: 101}) SET r101.status = 'Available';
-MERGE (r102:Room {room_no: 102}) SET r102.status = 'Available';
-MERGE (r103:Room {room_no: 103}) SET r103.status = 'Occupied';
-MERGE (r104:Room {room_no: 104}) SET r104.status = 'Available';
-MERGE (r105:Room {room_no: 105}) SET r105.status = 'Maintenance';
+MERGE (r101:Room {room_id: 'RM101'}) SET r101.room_no = 101, r101.status = 'Available';
+MERGE (r102:Room {room_id: 'RM102'}) SET r102.room_no = 102, r102.status = 'Available';
+MERGE (r103:Room {room_id: 'RM103'}) SET r103.room_no = 103, r103.status = 'Available';
+MERGE (r104:Room {room_id: 'RM104'}) SET r104.room_no = 104, r104.status = 'Available';
+MERGE (r105:Room {room_id: 'RM105'}) SET r105.room_no = 105, r105.status = 'Maintenance';
 
 // --- Rooms for Royal Orchid Resort (H002) ---
-MERGE (r201:Room {room_no: 201}) SET r201.status = 'Available';
-MERGE (r202:Room {room_no: 202}) SET r202.status = 'Occupied';
-MERGE (r203:Room {room_no: 203}) SET r203.status = 'Available';
-MERGE (r204:Room {room_no: 204}) SET r204.status = 'Available';
+MERGE (r201:Room {room_id: 'RM201'}) SET r201.room_no = 201, r201.status = 'Available';
+MERGE (r202:Room {room_id: 'RM202'}) SET r202.room_no = 202, r202.status = 'Available';
+MERGE (r203:Room {room_id: 'RM203'}) SET r203.room_no = 203, r203.status = 'Available';
+MERGE (r204:Room {room_id: 'RM204'}) SET r204.room_no = 204, r204.status = 'Available';
 
 // --- Rooms for Seaside Inn (H003) ---
-MERGE (r301:Room {room_no: 301}) SET r301.status = 'Available';
-MERGE (r302:Room {room_no: 302}) SET r302.status = 'Occupied';
-MERGE (r303:Room {room_no: 303}) SET r303.status = 'Available';
+MERGE (r301:Room {room_id: 'RM301'}) SET r301.room_no = 301, r301.status = 'Available';
+MERGE (r302:Room {room_id: 'RM302'}) SET r302.room_no = 302, r302.status = 'Available';
+MERGE (r303:Room {room_id: 'RM303'}) SET r303.room_no = 303, r303.status = 'Available';
 
 // --- Hotel-Room relationships ---
 MATCH (h:Hotel {hotel_id: 'H001'}), (r:Room) WHERE r.room_no IN [101,102,103,104,105]

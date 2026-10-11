@@ -22,6 +22,7 @@ class RoomCategoryCreate(BaseModel):
 
 # --- Room ---
 class RoomCreate(BaseModel):
+    room_id: Optional[str] = Field(None, min_length=1, max_length=20)
     room_no: int = Field(..., gt=0)
     status: str = Field(default="Available")
     hotel_id: str = Field(..., min_length=1)
@@ -62,11 +63,12 @@ class GuestCreate(BaseModel):
 
 # --- Reservation ---
 class ReservationCreate(BaseModel):
-    res_id: str = Field(..., min_length=1, max_length=10)
+    res_id: str = Field(..., min_length=1, max_length=20)
     check_in_date: date
     check_out_date: date
     guest_id: str = Field(..., min_length=1)
-    room_no: int = Field(..., gt=0)
+    room_id: Optional[str] = Field(None, min_length=1, max_length=20)
+    room_no: Optional[int] = Field(None, gt=0)
     staff_id: str = Field(..., min_length=1)
 
 
@@ -76,3 +78,5 @@ class RoomSearch(BaseModel):
     category_name: Optional[str] = None
     max_rent: Optional[float] = None
     status: Optional[str] = None
+    check_in_date: Optional[date] = None
+    check_out_date: Optional[date] = None

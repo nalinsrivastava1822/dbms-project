@@ -69,3 +69,30 @@ def get_recent_reservations():
         return results
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/revenue-analytics")
+def get_revenue_analytics():
+    """
+    Return hotel capacity pricing separated from booked reservation revenue.
+    Avoids cartesian rent duplication by calculating inventory capacity and
+    reservation revenue in separate aggregation phases.
+    """
+    try:
+        query = """
+        MATCH (h:Hotel)-[:HAS_ROOM]->(r:Room)-[:BELONGS_TO]->(rc:RoomCategory)
+        WITH h, count(r) AS total_rooms, sum(rc.rent) AS potential_daily_revenue, collect(r) AS rooms
+        OPTIONAL MATCH (res:Reservation)-[:BOOKS]->(r:Room)
+        WHERE r IN rooms AND res.status IN ['Active', 'Confirmed', 'Completed']
+        OPTIONAL MATCH (r)-[:BELONGS_TO]->(rc:RoomCategory)
+        RETURN h.hotel_id AS hotel_id,
+               h.name AS hotel_name,
+               total_rooms,
+               potential_daily_revenue,
+               count(DISTINCT res) AS total_bookings
+        ORDER BY h.name
+        """
+        return db.execute_read(query)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+

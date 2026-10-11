@@ -3,9 +3,45 @@ Staff API — List staff and view reservation processing.
 """
 from fastapi import APIRouter, HTTPException, Query
 from backend.database import db
+from backend.models.schemas import StaffCreate
 from typing import Optional
 
 router = APIRouter(prefix="/api/staff", tags=["Staff"])
+
+
+@router.post("/", status_code=201)
+def create_staff(staff: StaffCreate):
+    """Create a new staff member assigned to a department."""
+    dup_check = db.execute_read(
+        "MATCH (s:Staff {staff_id: $staff_id}) RETURN s",
+        {"staff_id": staff.staff_id}
+    )
+    if dup_check:
+        raise HTTPException(status_code=409, detail=f"Staff with ID '{staff.staff_id}' already exists")
+
+    dept_check = db.execute_read(
+        "MATCH (d:Department {dept_id: $dept_id}) RETURN d",
+        {"dept_id": staff.dept_id}
+    )
+    if not dept_check:
+        raise HTTPException(status_code=404, detail=f"Department '{staff.dept_id}' not found")
+
+    query = """
+    MATCH (d:Department {dept_id: $dept_id})
+    CREATE (s:Staff {
+        staff_id: $staff_id,
+        name: $name,
+        age: $age,
+        salary: $salary,
+        contact_info: $contact_info
+    })
+    CREATE (d)-[:EMPLOYS]->(s)
+    RETURN s.staff_id AS staff_id, s.name AS name, s.age AS age,
+           s.salary AS salary, s.contact_info AS contact_info, d.dept_id AS dept_id
+    """
+    result = db.execute_write(query, staff.model_dump())
+    return result[0] if result else {"message": "Staff member created"}
+
 
 
 @router.get("/")
