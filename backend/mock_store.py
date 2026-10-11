@@ -639,7 +639,7 @@ class MockGraphStore:
             return results
 
         # List Staff
-        if "MATCH (s:Staff)-[:EMPLOYS]-(d:Department)-[:HAS_DEPARTMENT]-(h:Hotel)" in q:
+        if ("HAS_DEPARTMENT" in q and "EMPLOYS" in q and "Staff" in q) or "list_staff" in q:
             results = []
             for s_id, s in sorted(self.staff.items()):
                 d = self.departments.get(s["dept_id"], {})
@@ -652,8 +652,11 @@ class MockGraphStore:
                     "salary": s["salary"],
                     "contact_info": s["contact_info"],
                     "dept_id": s["dept_id"],
+                    "department": d.get("d_role", "N/A"),
                     "d_role": d.get("d_role", "N/A"),
+                    "hotel_id": h.get("hotel_id", "N/A"),
                     "hotel_name": h.get("name", "N/A"),
+                    "reservations_processed": proc_count,
                     "processed_reservations": proc_count,
                 })
             return results
