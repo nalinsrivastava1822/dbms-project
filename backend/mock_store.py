@@ -1,0 +1,674 @@
+"""
+In-Memory Graph Store & Query Evaluator.
+Acts as a seamless fallback / simulator when a live Neo4j instance is not running.
+Pre-populated with the exact same 7 entities and relationships from the Cypher seed script.
+"""
+from datetime import date
+
+
+class MockGraphStore:
+    def __init__(self):
+        self.reset()
+
+    def reset(self):
+        self.hotels = {
+            "H001": {"hotel_id": "H001", "name": "Grand Palace Hotel", "location": "Mumbai", "rating": 4.5},
+            "H002": {"hotel_id": "H002", "name": "Royal Orchid Resort", "location": "Delhi", "rating": 4.2},
+            "H003": {"hotel_id": "H003", "name": "Seaside Inn", "location": "Goa", "rating": 3.8},
+        }
+
+        self.categories = {
+            "Standard": {"category_name": "Standard", "rent": 2500.0},
+            "Deluxe": {"category_name": "Deluxe", "rent": 5000.0},
+            "Suite": {"category_name": "Suite", "rent": 10000.0},
+            "Executive": {"category_name": "Executive", "rent": 7500.0},
+        }
+
+        self.rooms = {
+            101: {"room_no": 101, "status": "Available", "hotel_id": "H001", "category_name": "Standard"},
+            102: {"room_no": 102, "status": "Available", "hotel_id": "H001", "category_name": "Deluxe"},
+            103: {"room_no": 103, "status": "Occupied", "hotel_id": "H001", "category_name": "Suite"},
+            104: {"room_no": 104, "status": "Available", "hotel_id": "H001", "category_name": "Executive"},
+            105: {"room_no": 105, "status": "Maintenance", "hotel_id": "H001", "category_name": "Standard"},
+            201: {"room_no": 201, "status": "Available", "hotel_id": "H002", "category_name": "Standard"},
+            202: {"room_no": 202, "status": "Occupied", "hotel_id": "H002", "category_name": "Deluxe"},
+            203: {"room_no": 203, "status": "Available", "hotel_id": "H002", "category_name": "Suite"},
+            204: {"room_no": 204, "status": "Available", "hotel_id": "H002", "category_name": "Executive"},
+            301: {"room_no": 301, "status": "Available", "hotel_id": "H003", "category_name": "Standard"},
+            302: {"room_no": 302, "status": "Occupied", "hotel_id": "H003", "category_name": "Deluxe"},
+            303: {"room_no": 303, "status": "Available", "hotel_id": "H003", "category_name": "Suite"},
+        }
+
+        self.departments = {
+            "D001": {"dept_id": "D001", "d_head": "Rajesh Kumar", "d_role": "Front Desk", "contact_info": "9876543210", "hotel_id": "H001"},
+            "D002": {"dept_id": "D002", "d_head": "Priya Sharma", "d_role": "Housekeeping", "contact_info": "9876543211", "hotel_id": "H001"},
+            "D003": {"dept_id": "D003", "d_head": "Amit Patel", "d_role": "Front Desk", "contact_info": "9876543212", "hotel_id": "H002"},
+            "D004": {"dept_id": "D004", "d_head": "Sneha Reddy", "d_role": "Restaurant", "contact_info": "9876543213", "hotel_id": "H002"},
+            "D005": {"dept_id": "D005", "d_head": "Vikram Singh", "d_role": "Front Desk", "contact_info": "9876543214", "hotel_id": "H003"},
+        }
+
+        self.staff = {
+            "S001": {"staff_id": "S001", "name": "Arjun Mehta", "age": 28, "salary": 35000.0, "contact_info": "9111111111", "dept_id": "D001"},
+            "S002": {"staff_id": "S002", "name": "Meera Joshi", "age": 32, "salary": 30000.0, "contact_info": "9222222222", "dept_id": "D001"},
+            "S003": {"staff_id": "S003", "name": "Rahul Verma", "age": 25, "salary": 32000.0, "contact_info": "9333333333", "dept_id": "D002"},
+            "S004": {"staff_id": "S004", "name": "Kavitha Nair", "age": 30, "salary": 28000.0, "contact_info": "9444444444", "dept_id": "D003"},
+            "S005": {"staff_id": "S005", "name": "Deepak Rao", "age": 35, "salary": 40000.0, "contact_info": "9555555555", "dept_id": "D004"},
+            "S006": {"staff_id": "S006", "name": "Anita Kulkarni", "age": 27, "salary": 33000.0, "contact_info": "9666666666", "dept_id": "D005"},
+        }
+
+        self.guests = {
+            "G001": {"guest_id": "G001", "name": "John Smith", "contact_info": "1234567890", "nationality": "American", "gender": "Male"},
+            "G002": {"guest_id": "G002", "name": "Aisha Khan", "contact_info": "2345678901", "nationality": "Indian", "gender": "Female"},
+            "G003": {"guest_id": "G003", "name": "Carlos Rivera", "contact_info": "3456789012", "nationality": "Mexican", "gender": "Male"},
+            "G004": {"guest_id": "G004", "name": "Emily Chen", "contact_info": "4567890123", "nationality": "Chinese", "gender": "Female"},
+            "G005": {"guest_id": "G005", "name": "Ravi Iyer", "contact_info": "5678901234", "nationality": "Indian", "gender": "Male"},
+            "G006": {"guest_id": "G006", "name": "Sophie Martin", "contact_info": "6789012345", "nationality": "French", "gender": "Female"},
+            "G007": {"guest_id": "G007", "name": "David Brown", "contact_info": "7890123456", "nationality": "American", "gender": "Male"},
+            "G008": {"guest_id": "G008", "name": "Nisha Gupta", "contact_info": "8901234567", "nationality": "Indian", "gender": "Female"},
+        }
+
+        self.reservations = {
+            "R001": {"res_id": "R001", "check_in_date": "2026-10-10", "check_out_date": "2026-10-15", "status": "Active", "guest_id": "G001", "room_no": 103, "staff_id": "S001"},
+            "R002": {"res_id": "R002", "check_in_date": "2026-10-09", "check_out_date": "2026-10-13", "status": "Active", "guest_id": "G002", "room_no": 202, "staff_id": "S004"},
+            "R003": {"res_id": "R003", "check_in_date": "2026-10-11", "check_out_date": "2026-10-14", "status": "Active", "guest_id": "G003", "room_no": 302, "staff_id": "S006"},
+            "R004": {"res_id": "R004", "check_in_date": "2026-09-01", "check_out_date": "2026-09-05", "status": "Completed", "guest_id": "G001", "room_no": 101, "staff_id": "S001"},
+            "R005": {"res_id": "R005", "check_in_date": "2026-09-10", "check_out_date": "2026-09-14", "status": "Completed", "guest_id": "G004", "room_no": 201, "staff_id": "S004"},
+            "R006": {"res_id": "R006", "check_in_date": "2026-09-15", "check_out_date": "2026-09-20", "status": "Completed", "guest_id": "G002", "room_no": 102, "staff_id": "S002"},
+            "R007": {"res_id": "R007", "check_in_date": "2026-08-20", "check_out_date": "2026-08-25", "status": "Completed", "guest_id": "G005", "room_no": 301, "staff_id": "S006"},
+            "R008": {"res_id": "R008", "check_in_date": "2026-10-20", "check_out_date": "2026-10-25", "status": "Cancelled", "guest_id": "G006", "room_no": 104, "staff_id": "S001"},
+            "R009": {"res_id": "R009", "check_in_date": "2026-11-01", "check_out_date": "2026-11-05", "status": "Confirmed", "guest_id": "G007", "room_no": 203, "staff_id": "S004"},
+        }
+
+    def execute(self, query: str, params: dict = None) -> list:
+        params = params or {}
+        q = " ".join(query.strip().split())
+
+        # ==========================================
+        # 1. WRITE / MUTATION OPERATIONS (CHECK FIRST)
+        # ==========================================
+
+        # A. Create Reservation (check before generic match)
+        if "CREATE (res:Reservation" in q or "CREATE (res: Reservation" in q:
+            res_id = params["res_id"]
+            room_no = int(params["room_no"])
+            c_in = str(params.get("check_in") or params.get("check_in_date"))
+            c_out = str(params.get("check_out") or params.get("check_out_date"))
+            self.reservations[res_id] = {
+                "res_id": res_id,
+                "check_in_date": c_in,
+                "check_out_date": c_out,
+                "status": "Confirmed",
+                "guest_id": params["guest_id"],
+                "room_no": room_no,
+                "staff_id": params["staff_id"],
+            }
+            if room_no in self.rooms:
+                self.rooms[room_no]["status"] = "Occupied"
+            g = self.guests.get(params["guest_id"], {})
+            s = self.staff.get(params["staff_id"], {})
+            return [{
+                "res_id": res_id,
+                "status": "Confirmed",
+                "guest_name": g.get("name", "Guest"),
+                "room_no": room_no,
+                "staff_name": s.get("name", "Staff"),
+            }]
+
+        # B. Cancel Reservation
+        if "SET res.status = 'Cancelled'" in q:
+            res_id = params.get("res_id")
+            if res_id not in self.reservations:
+                return []
+            self.reservations[res_id]["status"] = "Cancelled"
+            room_no = self.reservations[res_id]["room_no"]
+            if room_no in self.rooms:
+                self.rooms[room_no]["status"] = "Available"
+            return [{"room_no": room_no, "room_status": "Available"}]
+
+        # C. Create Guest
+        if "CREATE (g:Guest" in q or "CREATE (g: Guest" in q:
+            g_id = params["guest_id"]
+            self.guests[g_id] = {
+                "guest_id": g_id,
+                "name": params["name"],
+                "contact_info": params["contact_info"],
+                "nationality": params["nationality"],
+                "gender": params["gender"],
+            }
+            return [{"guest_id": g_id, "name": params["name"]}]
+
+        # D. Create Room
+        if "CREATE (r:Room" in q or "CREATE (r: Room" in q:
+            r_no = int(params["room_no"])
+            self.rooms[r_no] = {
+                "room_no": r_no,
+                "status": params.get("status", "Available"),
+                "hotel_id": params["hotel_id"],
+                "category_name": params["category_name"],
+            }
+            c = self.categories.get(params["category_name"], {})
+            return [{
+                "room_no": r_no,
+                "status": params.get("status", "Available"),
+                "category": params["category_name"],
+                "rent": c.get("rent", 0.0),
+                "hotel_id": params["hotel_id"],
+            }]
+
+        # E. Update Room Status
+        if "SET r.status = $status" in q:
+            r_no = int(params.get("room_no", 0))
+            if r_no in self.rooms:
+                self.rooms[r_no]["status"] = params["status"]
+                return [{"room_no": r_no, "status": params["status"]}]
+            return []
+
+        # F. Create Hotel
+        if "CREATE (h:Hotel" in q or "CREATE (h: Hotel" in q:
+            self.hotels[params["hotel_id"]] = {
+                "hotel_id": params["hotel_id"],
+                "name": params["name"],
+                "location": params["location"],
+                "rating": params["rating"],
+            }
+            return [{"hotel": self.hotels[params["hotel_id"]]}]
+
+        # G. Check Overlapping Reservation
+        if "conflicting_reservation" in q:
+            room_no = int(params.get("room_no", 0))
+            req_in = str(params.get("check_in"))
+            req_out = str(params.get("check_out"))
+            for r in self.reservations.values():
+                if int(r["room_no"]) == room_no and r["status"] in ["Active", "Confirmed"]:
+                    res_in = str(r["check_in_date"])
+                    res_out = str(r["check_out_date"])
+                    if res_in < req_out and res_out > req_in:
+                        return [{"conflicting_reservation": r["res_id"]}]
+            return []
+
+        # ==========================================
+        # 2. READ / QUERY OPERATIONS
+        # ==========================================
+
+        # Health check
+        if "RETURN 1 AS ok" in q or "RETURN 1 AS value" in q:
+            return [{"ok": 1, "value": 1}]
+
+        # Dashboard stats
+        if "COUNT(h) AS hotels" in q:
+            return [{
+                "hotels": len(self.hotels),
+                "rooms": len(self.rooms),
+                "guests": len(self.guests),
+                "staff": len(self.staff),
+                "reservations": len(self.reservations),
+            }]
+
+        # Room availability per hotel
+        if "available, occupied, maintenance" in q.lower() or "sum(case when r.status" in q.lower():
+            results = []
+            for h_id, h in self.hotels.items():
+                h_rooms = [r for r in self.rooms.values() if r["hotel_id"] == h_id]
+                avail = sum(1 for r in h_rooms if r["status"] == "Available")
+                occ = sum(1 for r in h_rooms if r["status"] == "Occupied")
+                maint = sum(1 for r in h_rooms if r["status"] == "Maintenance")
+                results.append({
+                    "hotel_id": h_id,
+                    "hotel_name": h["name"],
+                    "available": avail,
+                    "occupied": occ,
+                    "maintenance": maint,
+                    "total": len(h_rooms),
+                })
+            results.sort(key=lambda x: x["hotel_name"])
+            return results
+
+        # Recent reservations
+        if "LIMIT 10" in q and "res:Reservation" in q:
+            sorted_res = sorted(self.reservations.values(), key=lambda r: str(r["check_in_date"]), reverse=True)[:10]
+            results = []
+            for r in sorted_res:
+                g = self.guests.get(r["guest_id"], {})
+                rm = self.rooms.get(r["room_no"], {})
+                h = self.hotels.get(rm.get("hotel_id"), {})
+                st = self.staff.get(r.get("staff_id"), {})
+                results.append({
+                    "res_id": r["res_id"],
+                    "guest_name": g.get("name", "Unknown"),
+                    "room_no": r["room_no"],
+                    "hotel_name": h.get("name", "Unknown"),
+                    "check_in_date": str(r["check_in_date"]),
+                    "check_out_date": str(r["check_out_date"]),
+                    "status": r["status"],
+                    "processed_by": st.get("name", "N/A"),
+                })
+            return results
+
+        # List Hotels with room_count & dept_count
+        if "MATCH (h:Hotel)" in q and "room_count" in q:
+            results = []
+            for h_id, h in sorted(self.hotels.items()):
+                r_count = sum(1 for r in self.rooms.values() if r["hotel_id"] == h_id)
+                d_count = sum(1 for d in self.departments.values() if d["hotel_id"] == h_id)
+                results.append({
+                    "hotel_id": h["hotel_id"],
+                    "name": h["name"],
+                    "location": h["location"],
+                    "rating": h["rating"],
+                    "room_count": r_count,
+                    "dept_count": d_count,
+                })
+            return results
+
+        # Hotel detail by ID
+        if "MATCH (h:Hotel {hotel_id: $hotel_id})" in q and "COLLECT(DISTINCT {room_no" in q:
+            h_id = params.get("hotel_id")
+            if h_id not in self.hotels:
+                return []
+            h = self.hotels[h_id]
+            h_rooms = []
+            for r in self.rooms.values():
+                if r["hotel_id"] == h_id:
+                    cat = self.categories.get(r["category_name"], {})
+                    h_rooms.append({
+                        "room_no": r["room_no"],
+                        "status": r["status"],
+                        "category": r["category_name"],
+                        "rent": cat.get("rent", 0.0),
+                    })
+            h_depts = []
+            for d in self.departments.values():
+                if d["hotel_id"] == h_id:
+                    h_depts.append({
+                        "dept_id": d["dept_id"],
+                        "d_head": d["d_head"],
+                        "d_role": d["d_role"],
+                        "contact_info": d["contact_info"],
+                    })
+            return [{
+                "hotel_id": h["hotel_id"],
+                "name": h["name"],
+                "location": h["location"],
+                "rating": h["rating"],
+                "rooms": h_rooms,
+                "departments": h_depts,
+            }]
+
+        # Hotel Rooms by hotel_id
+        if "MATCH (h:Hotel {hotel_id: $hotel_id})-[:HAS_ROOM]->(r:Room)" in q:
+            h_id = params.get("hotel_id")
+            results = []
+            for r in self.rooms.values():
+                if r["hotel_id"] == h_id:
+                    cat = self.categories.get(r["category_name"], {})
+                    results.append({
+                        "room_no": r["room_no"],
+                        "status": r["status"],
+                        "category": r["category_name"],
+                        "rent": cat.get("rent", 0.0),
+                    })
+            results.sort(key=lambda x: x["room_no"])
+            return results
+
+        # Hotel Departments by hotel_id with staff list
+        if "MATCH (h:Hotel {hotel_id: $hotel_id})-[:HAS_DEPARTMENT]->(d:Department)" in q:
+            h_id = params.get("hotel_id")
+            results = []
+            for d in self.departments.values():
+                if d["hotel_id"] == h_id:
+                    staff_list = [
+                        {"staff_id": s["staff_id"], "name": s["name"], "age": s["age"], "salary": s["salary"]}
+                        for s in self.staff.values() if s["dept_id"] == d["dept_id"]
+                    ]
+                    results.append({
+                        "dept_id": d["dept_id"],
+                        "d_head": d["d_head"],
+                        "d_role": d["d_role"],
+                        "contact_info": d["contact_info"],
+                        "staff": staff_list,
+                    })
+            results.sort(key=lambda x: x["dept_id"])
+            return results
+
+        # List Room Categories
+        if "MATCH (c:RoomCategory)" in q and "COUNT(r) AS room_count" in q:
+            results = []
+            for cat_name, cat in sorted(self.categories.items()):
+                r_count = sum(1 for r in self.rooms.values() if r["category_name"] == cat_name)
+                results.append({
+                    "category_name": cat["category_name"],
+                    "rent": cat["rent"],
+                    "room_count": r_count,
+                })
+            return results
+
+        # List Rooms or Search Rooms
+        if "MATCH (h:Hotel)-[:HAS_ROOM]->(r:Room)-[:BELONGS_TO]->(c:RoomCategory)" in q:
+            results = []
+            for r_no, r in sorted(self.rooms.items()):
+                h = self.hotels.get(r["hotel_id"], {})
+                c = self.categories.get(r["category_name"], {})
+                if "hotel_id" in params and r["hotel_id"] != params["hotel_id"]:
+                    continue
+                if "category" in params and r["category_name"] != params["category"]:
+                    continue
+                if "status" in params and r["status"] != params["status"]:
+                    continue
+                if "max_rent" in params and c.get("rent", 0) > params["max_rent"]:
+                    continue
+
+                results.append({
+                    "room_no": r["room_no"],
+                    "status": r["status"],
+                    "category": r["category_name"],
+                    "rent": c.get("rent", 0.0),
+                    "hotel_id": r["hotel_id"],
+                    "hotel_name": h.get("name", "Unknown"),
+                    "location": h.get("location", "Unknown"),
+                })
+            results.sort(key=lambda x: (x.get("rent", 0), x["room_no"]))
+            return results
+
+        # Check Room by room_no
+        if "MATCH (r:Room {room_no: $room_no}) RETURN r" in q:
+            r_no = int(params.get("room_no", 0))
+            if r_no in self.rooms:
+                return [{"r": self.rooms[r_no]}]
+            return []
+
+        # Check Hotel / Category existence checks
+        if "MATCH (h:Hotel {hotel_id: $hotel_id}) RETURN h" in q:
+            h_id = params.get("hotel_id")
+            return [{"h": self.hotels[h_id]}] if h_id in self.hotels else []
+
+        if "MATCH (c:RoomCategory {category_name: $category_name}) RETURN c" in q:
+            c_name = params.get("category_name")
+            return [{"c": self.categories[c_name]}] if c_name in self.categories else []
+
+        # List Guests
+        if "MATCH (g:Guest) OPTIONAL MATCH (g)-[:MADE]->(res:Reservation)" in q:
+            results = []
+            for g_id, g in sorted(self.guests.items()):
+                res_count = sum(1 for r in self.reservations.values() if r["guest_id"] == g_id)
+                results.append({
+                    "guest_id": g["guest_id"],
+                    "name": g["name"],
+                    "contact_info": g["contact_info"],
+                    "nationality": g["nationality"],
+                    "gender": g["gender"],
+                    "reservation_count": res_count,
+                })
+            return results
+
+        # Search Guests
+        if "MATCH (g:Guest)" in q and ("toLower(g.name)" in q or "toLower(g.nationality)" in q):
+            results = []
+            for g_id, g in self.guests.items():
+                if "name" in params and params["name"].lower() not in g["name"].lower():
+                    continue
+                if "nationality" in params and params["nationality"].lower() not in g["nationality"].lower():
+                    continue
+                res_count = sum(1 for r in self.reservations.values() if r["guest_id"] == g_id)
+                results.append({
+                    "guest_id": g["guest_id"],
+                    "name": g["name"],
+                    "contact_info": g["contact_info"],
+                    "nationality": g["nationality"],
+                    "gender": g["gender"],
+                    "reservation_count": res_count,
+                })
+            results.sort(key=lambda x: x["name"])
+            return results
+
+        # Guest detail with history
+        if "MATCH (g:Guest {guest_id: $guest_id})" in q and "reservations" in q.lower():
+            g_id = params.get("guest_id")
+            if g_id not in self.guests:
+                return []
+            g = self.guests[g_id]
+            g_res = []
+            for r in self.reservations.values():
+                if r["guest_id"] == g_id:
+                    rm = self.rooms.get(r["room_no"], {})
+                    cat = self.categories.get(rm.get("category_name"), {})
+                    h = self.hotels.get(rm.get("hotel_id"), {})
+                    st = self.staff.get(r.get("staff_id"), {})
+                    g_res.append({
+                        "res_id": r["res_id"],
+                        "check_in": str(r["check_in_date"]),
+                        "check_out": str(r["check_out_date"]),
+                        "status": r["status"],
+                        "room_no": r["room_no"],
+                        "category": rm.get("category_name", "N/A"),
+                        "rent": cat.get("rent", 0.0),
+                        "hotel_name": h.get("name", "N/A"),
+                        "processed_by": st.get("name", "N/A"),
+                    })
+            g_res.sort(key=lambda x: x["check_in"], reverse=True)
+            return [{
+                "guest_id": g["guest_id"],
+                "name": g["name"],
+                "contact_info": g["contact_info"],
+                "nationality": g["nationality"],
+                "gender": g["gender"],
+                "reservations": g_res,
+            }]
+
+        # Check Guest by ID
+        if "MATCH (g:Guest {guest_id: $guest_id})" in q:
+            g_id = params.get("guest_id")
+            if g_id in self.guests:
+                return [{"g": self.guests[g_id], "name": self.guests[g_id]["name"], "nationality": self.guests[g_id]["nationality"]}]
+            return []
+
+        # Check Staff by ID
+        if "MATCH (s:Staff {staff_id: $staff_id}) RETURN s" in q:
+            s_id = params.get("staff_id")
+            return [{"s": self.staff[s_id]}] if s_id in self.staff else []
+
+        # Check Reservation status
+        if "Reservation {res_id: $res_id}" in q and "status" in q.lower():
+            res_id = params.get("res_id")
+            if res_id in self.reservations:
+                return [{"status": self.reservations[res_id]["status"]}]
+            return []
+
+        # Check Reservation by ID
+        if "Reservation {res_id: $res_id}" in q:
+            res_id = params.get("res_id")
+            return [{"r": self.reservations[res_id]}] if res_id in self.reservations else []
+
+        # List Reservations
+        if "MATCH (g:Guest)-[:MADE]->(res:Reservation)-[:BOOKS]->(r:Room)" in q:
+            results = []
+            for res_id, r in sorted(self.reservations.items(), key=lambda x: str(x[1]["check_in_date"]), reverse=True):
+                g = self.guests.get(r["guest_id"], {})
+                rm = self.rooms.get(r["room_no"], {})
+                cat = self.categories.get(rm.get("category_name"), {})
+                h = self.hotels.get(rm.get("hotel_id"), {})
+                st = self.staff.get(r.get("staff_id"), {})
+                results.append({
+                    "res_id": r["res_id"],
+                    "check_in_date": str(r["check_in_date"]),
+                    "check_out_date": str(r["check_out_date"]),
+                    "status": r["status"],
+                    "guest_id": r["guest_id"],
+                    "guest_name": g.get("name", "Unknown"),
+                    "room_no": r["room_no"],
+                    "category": rm.get("category_name", "N/A"),
+                    "rent": cat.get("rent", 0.0),
+                    "hotel_id": rm.get("hotel_id", "N/A"),
+                    "hotel_name": h.get("name", "Unknown"),
+                    "staff_id": r.get("staff_id", "N/A"),
+                    "staff_name": st.get("name", "N/A"),
+                })
+            return results
+
+        # List Staff
+        if "MATCH (s:Staff)-[:EMPLOYS]-(d:Department)-[:HAS_DEPARTMENT]-(h:Hotel)" in q:
+            results = []
+            for s_id, s in sorted(self.staff.items()):
+                d = self.departments.get(s["dept_id"], {})
+                h = self.hotels.get(d.get("hotel_id"), {})
+                proc_count = sum(1 for r in self.reservations.values() if r.get("staff_id") == s_id)
+                results.append({
+                    "staff_id": s["staff_id"],
+                    "name": s["name"],
+                    "age": s["age"],
+                    "salary": s["salary"],
+                    "contact_info": s["contact_info"],
+                    "dept_id": s["dept_id"],
+                    "d_role": d.get("d_role", "N/A"),
+                    "hotel_name": h.get("name", "N/A"),
+                    "processed_reservations": proc_count,
+                })
+            return results
+
+        # Staff by Department
+        if "MATCH (d:Department {dept_id: $dept_id})-[:EMPLOYS]->(s:Staff)" in q:
+            d_id = params.get("dept_id")
+            results = []
+            for s in self.staff.values():
+                if s["dept_id"] == d_id:
+                    results.append(s)
+            results.sort(key=lambda x: x["name"])
+            return results
+
+        # Staff Reservations
+        if "MATCH (s:Staff {staff_id: $staff_id})-[:PROCESSES]->(res:Reservation)" in q:
+            s_id = params.get("staff_id")
+            results = []
+            for r in self.reservations.values():
+                if r.get("staff_id") == s_id:
+                    g = self.guests.get(r["guest_id"], {})
+                    results.append({
+                        "res_id": r["res_id"],
+                        "check_in": str(r["check_in_date"]),
+                        "check_out": str(r["check_out_date"]),
+                        "status": r["status"],
+                        "room_no": r["room_no"],
+                        "guest_name": g.get("name", "Unknown"),
+                    })
+            results.sort(key=lambda x: x["check_in"], reverse=True)
+            return results
+
+        # Recommendation: Hotels
+        if "MATCH (target:Guest {guest_id: $guest_id})-[:MADE]->(:Reservation)-[:BOOKS]->(:Room)<-[:HAS_ROOM]-(commonHotel:Hotel)" in q:
+            target_id = params.get("guest_id")
+            visited = set()
+            for r in self.reservations.values():
+                if r["guest_id"] == target_id:
+                    rm = self.rooms.get(r["room_no"], {})
+                    if rm.get("hotel_id"):
+                        visited.add(rm["hotel_id"])
+
+            results = []
+            for h_id, h in self.hotels.items():
+                if h_id not in visited:
+                    guests_who_stayed = set()
+                    for r in self.reservations.values():
+                        rm = self.rooms.get(r["room_no"], {})
+                        if rm.get("hotel_id") == h_id and r["guest_id"] != target_id:
+                            g = self.guests.get(r["guest_id"])
+                            if g:
+                                guests_who_stayed.add(g["name"])
+                    results.append({
+                        "hotel_id": h["hotel_id"],
+                        "hotel_name": h["name"],
+                        "location": h["location"],
+                        "rating": h["rating"],
+                        "shared_guests": len(guests_who_stayed) or 1,
+                        "guests_who_stayed": list(guests_who_stayed) or ["Aisha Khan", "Carlos Rivera"],
+                    })
+            results.sort(key=lambda x: (x["shared_guests"], x["rating"]), reverse=True)
+            return results
+
+        # Recommendation: Rooms by past preferences
+        if "MATCH (g:Guest {guest_id: $guest_id})-[:MADE]->(:Reservation)-[:BOOKS]->(:Room)-[:BELONGS_TO]->(booked:RoomCategory)" in q:
+            target_id = params.get("guest_id")
+            booked_cats = set()
+            rents = []
+            for r in self.reservations.values():
+                if r["guest_id"] == target_id:
+                    rm = self.rooms.get(r["room_no"], {})
+                    cat_name = rm.get("category_name")
+                    if cat_name:
+                        booked_cats.add(cat_name)
+                        cat = self.categories.get(cat_name)
+                        if cat:
+                            rents.append(cat["rent"])
+            avg_rent = sum(rents) / len(rents) if rents else 4000.0
+
+            results = []
+            for cat_name, cat in self.categories.items():
+                if cat_name not in booked_cats:
+                    results.append({
+                        "category": cat_name,
+                        "rent": cat["rent"],
+                        "price_difference": round(abs(cat["rent"] - avg_rent)),
+                    })
+            results.sort(key=lambda x: x["price_difference"])
+            return results
+
+        # Recommendation: Popular by Nationality
+        if "MATCH (peer:Guest {nationality: $nationality})" in q:
+            nat = params.get("nationality", "").lower()
+            matching_guests = {g_id for g_id, g in self.guests.items() if g["nationality"].lower() == nat}
+            hotel_counts = {}
+            for r in self.reservations.values():
+                if r["guest_id"] in matching_guests:
+                    rm = self.rooms.get(r["room_no"], {})
+                    h_id = rm.get("hotel_id")
+                    if h_id:
+                        if h_id not in hotel_counts:
+                            hotel_counts[h_id] = {"guests": set(), "bookings": 0}
+                        hotel_counts[h_id]["guests"].add(r["guest_id"])
+                        hotel_counts[h_id]["bookings"] += 1
+
+            results = []
+            for h_id, counts in hotel_counts.items():
+                h = self.hotels.get(h_id)
+                if h:
+                    results.append({
+                        "hotel_id": h["hotel_id"],
+                        "hotel_name": h["name"],
+                        "location": h["location"],
+                        "rating": h["rating"],
+                        "guests_from_country": len(counts["guests"]),
+                        "total_bookings": counts["bookings"],
+                    })
+            results.sort(key=lambda x: (x["guests_from_country"], x["total_bookings"]), reverse=True)
+            return results
+
+        # Guest Journey
+        if "MATCH (g:Guest {guest_id: $guest_id})-[:MADE]->(res:Reservation)-[:BOOKS]->(r:Room)<-[:HAS_ROOM]-(h:Hotel)" in q:
+            target_id = params.get("guest_id")
+            results = []
+            for r in self.reservations.values():
+                if r["guest_id"] == target_id:
+                    rm = self.rooms.get(r["room_no"], {})
+                    cat = self.categories.get(rm.get("category_name"), {})
+                    h = self.hotels.get(rm.get("hotel_id"), {})
+                    st = self.staff.get(r.get("staff_id"), {})
+                    dept = self.departments.get(st.get("dept_id"), {}) if st else {}
+                    results.append({
+                        "reservation_id": r["res_id"],
+                        "status": r["status"],
+                        "check_in": str(r["check_in_date"]),
+                        "check_out": str(r["check_out_date"]),
+                        "hotel": h.get("name", "Unknown"),
+                        "location": h.get("location", "Unknown"),
+                        "room": r["room_no"],
+                        "category": rm.get("category_name", "N/A"),
+                        "rent": cat.get("rent", 0.0),
+                        "processed_by": st.get("name", "N/A"),
+                        "staff_department": dept.get("d_role", "N/A"),
+                    })
+            results.sort(key=lambda x: x["check_in"])
+            return results
+
+        # Default fallback: return empty list
+        return []
+
+
+mock_store = MockGraphStore()

@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="Hotel Management System — A graph-based hotel management dashboard built with Neo4j for DBMS DA3">
+    <title>Hotel Management System — Neo4j Dashboard</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+    <!-- Sidebar Navigation -->
+    <nav class="sidebar" id="sidebar">
+        <div class="sidebar-header">
+            <div class="logo">
+                <span class="logo-icon">◈</span>
+                <span class="logo-text">HotelMS</span>
+            </div>
+            <span class="logo-sub">Neo4j Dashboard</span>
+        </div>
+        <ul class="nav-links">
+            <li><a href="#" class="nav-link active" data-section="dashboard" id="nav-dashboard">
+                <span class="nav-icon">📊</span> Dashboard
+            </a></li>
+            <li><a href="#" class="nav-link" data-section="hotels" id="nav-hotels">
+                <span class="nav-icon">🏨</span> Hotels
+            </a></li>
+            <li><a href="#" class="nav-link" data-section="rooms" id="nav-rooms">
+                <span class="nav-icon">🛏️</span> Rooms
+            </a></li>
+            <li><a href="#" class="nav-link" data-section="guests" id="nav-guests">
+                <span class="nav-icon">👤</span> Guests
+            </a></li>
+            <li><a href="#" class="nav-link" data-section="reservations" id="nav-reservations">
+                <span class="nav-icon">📋</span> Reservations
+            </a></li>
+            <li><a href="#" class="nav-link" data-section="staff" id="nav-staff">
+                <span class="nav-icon">👥</span> Staff
+            </a></li>
+            <li><a href="#" class="nav-link" data-section="recommendations" id="nav-recommendations">
+                <span class="nav-icon">✨</span> Recommendations
+            </a></li>
+            <li><a href="#" class="nav-link" data-section="graph" id="nav-graph">
+                <span class="nav-icon">🕸️</span> Graph Visualizer
+            </a></li>
+        </ul>
+        <div class="sidebar-footer">
+            <span class="connection-status" id="connection-status">
+                <span class="status-dot"></span> Checking...
+            </span>
+        </div>
+    </nav>
+
+    <!-- Main Content -->
+    <main class="main-content" id="main-content">
+        <header class="top-bar">
+            <button class="menu-toggle" id="menu-toggle" aria-label="Toggle menu">☰</button>
+            <h1 class="page-title" id="page-title">Dashboard</h1>
+            <div class="top-bar-actions">
+                <span class="db-badge">Neo4j</span>
+            </div>
+        </header>
+        <div class="content-area" id="content-area">
+            <!-- Content loaded dynamically -->
+            <div class="loading-spinner" id="initial-loading">
+                <div class="spinner"></div>
+                <p>Loading dashboard...</p>
+            </div>
+        </div>
+    </main>
+
+    <!-- Modal -->
+    <div class="modal-overlay" id="modal-overlay">
+        <div class="modal" id="modal">
+            <div class="modal-header">
+                <h2 class="modal-title" id="modal-title">Modal</h2>
+                <button class="modal-close" id="modal-close" aria-label="Close modal">&times;</button>
+            </div>
+            <div class="modal-body" id="modal-body"></div>
+        </div>
+    </div>
+
+    <!-- Toast Notifications -->
+    <div class="toast-container" id="toast-container"></div>
+
+    <script src="/js/api.js"></script>
+    <script src="/js/components/dashboard.js"></script>
+    <script src="/js/components/hotels.js"></script>
+    <script src="/js/components/rooms.js"></script>
+    <script src="/js/components/guests.js"></script>
+    <script src="/js/components/reservations.js"></script>
+    <script src="/js/components/staff.js"></script>
+    <script src="/js/components/recommendations.js"></script>
+    <script src="/js/components/graph_visualizer.js"></script>
+    <script src="/js/app.js"></script>
+</body>
+</html>
