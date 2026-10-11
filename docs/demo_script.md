@@ -51,7 +51,7 @@ Show the console output: `Application startup complete. Uvicorn running on http:
 Open `http://localhost:8000` in Google Chrome or Edge.
 
 1. **Top Metrics Bar**:
-   - Point to the live count cards: **Hotels (3)**, **Rooms (15)**, **Guests (10)**, **Staff (12)**, **Reservations (12)**.
+   - Point to the live count cards: **Hotels (3)**, **Rooms (15)**, **Guests (10)**, **Staff (6)**, **Reservations (12)**.
    - Point to the green badge: **Neo4j Connected** (live status from `/api/health`).
 
 2. **Room Availability Breakdown**:
@@ -70,14 +70,22 @@ Open `http://localhost:8000` in Google Chrome or Edge.
 - Filter by Hotel: Select **"Grand Palace Hotel"**.
 - Filter by Status: Select **"Available"**.
 - Adjust Max Rent slider to **₹6,000**.
-- **Point out:** The table instantly filters rooms meeting all graph conditions simultaneously.
+- **Point out:** The table instantly filters rooms meeting all graph conditions simultaneously without complex SQL joins.
 
 #### 2. Guest Directory & Booking History
 - Click on the **Guests** navigation tab.
-- Click on Guest **G001 (Aditi Rao)**.
+- Click on Guest **G001 (John Smith)**.
 - **Show the detail view:**
-  - Notice the reservation history table displaying hotel names, room categories, nightly rent, and staff members.
-  - **Explain the graph query:** *"Professor, in SQL this required joining 5 tables (`Guest`, `Reservation`, `Room`, `Hotel`, `Staff`). In Cypher, this is a single intuitive pattern: `(g:Guest)-[:MADE]->(res)-[:BOOKS]->(r)-[:BELONGS_TO]->(rc)`."*
+   - Notice the reservation history table displaying hotel names, room categories, nightly rent, and staff members.
+   - **Explain the graph query:** *"Professor, in SQL this required joining 5 tables (`Guest`, `Reservation`, `Room`, `Hotel`, `Staff`). In Cypher, this is a single intuitive pattern: `(g:Guest)-[:MADE]->(res)-[:BOOKS]->(r)-[:BELONGS_TO]->(rc)`."*
+
+#### 3. Staff Management & Live Data Entry
+- Click on the **Staff** navigation tab.
+- Show the staff directory categorized by department (`Front Desk`, `Housekeeping`, `Restaurant`) and hotel branch.
+- Click the **➕ Add Staff** button to open the modal.
+- Enter sample staff details:
+  - ID: `S007`, Name: `Meera Nair`, Age: `29`, Salary: `34000`, Phone: `9876543299`, Department: `D001 (Front Desk)`.
+- Click **Save Staff**. Show that the modal validates department existence, prevents duplicate IDs, and updates the table immediately.
 
 ---
 
@@ -87,14 +95,14 @@ Demonstrate strict ACID booking validation to show robust business logic:
 
 1. **Successful Booking**:
    - Navigate to **Reservations** -> click **New Reservation**.
-   - Input: Guest: `G003`, Room: `102`, Dates: `2026-12-01` to `2026-12-05`, Staff: `S001`.
+   - Input: Guest: `G003`, Room: `102` (`RM102`), Dates: `2026-12-01` to `2026-12-05`, Staff: `S001`.
    - Click **Create Reservation**. Notice success notification and status updated to *Confirmed*.
 
 2. **Triggering Double-Booking Prevention**:
    - Try creating another reservation for the **SAME room (102)** with overlapping dates: `2026-12-03` to `2026-12-08`.
    - Click **Create Reservation**.
-   - **Show the error alert:** *"Room 102 is already booked for overlapping dates."*
-   - **Explain:** *"The backend executes an atomic Cypher query checking for conflicting date intervals before creating any reservation node, enforcing zero double-booking errors."*
+   - **Show the error alert:** *"Room 102 has an overlapping reservation during this period."*
+   - **Explain:** *"The backend executes an atomic single-transaction Cypher callback checking for conflicting date intervals and room maintenance status before creating any reservation node, enforcing zero double-booking errors even under concurrent requests."*
 
 3. **Cancellation**:
    - Find the newly created reservation and click **Cancel Reservation**.
@@ -106,13 +114,13 @@ Demonstrate strict ACID booking validation to show robust business logic:
 
 Navigate to the **Recommendations** tab.
 
-1. Select **Aditi Rao (G001)** from the guest dropdown.
+1. Select **John Smith (G001)** from the guest dropdown.
 2. Click **Generate Recommendations**.
 3. **Show the results card:**
-   - The engine recommends **Royal Heritage Jaipur** and **Seaside Palms Goa** with category suggestions and peer traveler counts.
+   - The engine recommends **Royal Heritage Resort** and **Seaside Palms** with category suggestions and peer endorsements.
 4. **Explain the Cypher Traversal to the Professor:**
    > *"Professor, this is the core feature that demonstrates why Graph databases are superior to RDBMS. The engine finds other guests of similar nationality or past room preferences, identifies hotels they stayed at, filters out hotels the current guest has already visited, and ranks the results by peer popularity.*
-   > *In SQL, this requires 4 nested subqueries with self-joins that slow down significantly as the database grows. In Neo4j, it executes in less than 3 milliseconds because it traverses existing graph relationships."*
+   > *In SQL, this requires 4 nested subqueries with self-joins that degrade as table size increases. In Neo4j, our reproducible benchmark (`scripts/benchmark.py`) shows it traverses adjacent pointer edges with a median latency of only 0.004 ms."*
 
 ---
 

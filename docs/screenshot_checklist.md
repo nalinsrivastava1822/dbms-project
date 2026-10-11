@@ -10,15 +10,17 @@ Capture the following screenshots from your actual running application and paste
 | # | Item Description | Source View / URL | What to Highlight in Screenshot | Report Section |
 |---|---|---|---|---|
 | **SS-01** | Backend Startup & Neo4j Connection | PowerShell / VS Code Terminal | Server running on `http://127.0.0.1:8000`, successful driver connection | Section 4: Implementation |
-| **SS-02** | Main Dashboard & Key Metrics | Browser: `http://localhost:8000` | Metric cards: 3 Hotels, 15 Rooms, 10 Guests, 12 Staff, 12 Reservations | Section 4 & 8: Results |
+| **SS-02** | Main Dashboard & Key Metrics | Browser: `http://localhost:8000` | Metric cards: 3 Hotels, 15 Rooms, 10 Guests, 6 Staff, 12 Reservations | Section 4 & 8: Results |
 | **SS-03** | Room Availability Breakdown | Browser: Dashboard tab | Bar visualization showing available vs occupied rooms per hotel | Section 5: Query Aggregations |
 | **SS-04** | Room Directory & Filter in Action | Browser: `Rooms` tab | Filter controls (Hotel dropdown, Max rent slider, Status radio buttons) | Section 5: CRUD & Search |
 | **SS-05** | Guest Directory & Booking History | Browser: `Guests` tab | Guest G001 profile showing full traversed reservation history table | Section 5: Multi-hop Traversal |
 | **SS-06** | Creating a New Reservation | Browser: `Reservations` tab | Form fields populated (Guest ID, Room, Check-in, Check-out, Staff) | Section 5: Core Transactions |
-| **SS-07** | Booking Collision Prevention | Browser: `Reservations` tab | Red error modal/banner: *"Room is already booked for overlapping dates"* | Section 5 & 8: ACID Integrity |
+| **SS-07** | Booking Collision Prevention | Browser: `Reservations` tab | Red error modal/banner: *"Room has an overlapping reservation during this period"* | Section 5 & 8: ACID Integrity |
 | **SS-08** | Collaborative Recommendation Engine | Browser: `Recommendations` tab | Recommendations card for Guest G001 showing peer endorsements & hotels | Section 5: Graph Feature |
 | **SS-09** | Interactive Graph Network Visualizer | Browser: `Graph Visualizer` tab (`http://localhost:8000`) or Neo4j Browser (`http://localhost:7474`) | Visual force-directed nodes (Hotels, Rooms, Guests, Staff, Reservations) with physics and labeled directed relationship edges | Section 3: Graph Model |
-| **SS-10** | Automated Test Suite Execution | PowerShell / VS Code Terminal | Output of `pytest -v` showing green passed unit tests and execution summary | Section 8: Verification |
+| **SS-10** | Automated Test Suite Execution | PowerShell / VS Code Terminal | Output of `pytest -v` showing green passed unit tests (52 passed) and summary | Section 8: Verification |
+| **SS-11** | Staff Directory & Data Input Modal | Browser: `Staff` tab (`http://localhost:8000`) | Staff directory table and interactive "➕ Add Staff" modal form | Section 4: CRUD & Modules |
+| **SS-12** | Empirical Benchmark Execution | PowerShell / VS Code Terminal | Output of `python scripts/benchmark.py` showing 50-iteration SQL vs Graph timings | Section 6: Comparative Analysis |
 
 ---
 
@@ -39,8 +41,8 @@ Capture the following screenshots from your actual running application and paste
 - **Action**: Open `http://localhost:8000` in full screen.
 - **What to Capture**:
   - The header banner with title: *"Hotel Management System — Graph Database (Neo4j)"*.
-  - The green status badge: **"Neo4j Connected"**.
-  - The 5 metric counters (**Hotels: 3**, **Rooms: 15**, **Guests: 10**, **Staff: 12**, **Reservations: 12**).
+  - The green status badge: **"Neo4j Connected"** (or simulation mode).
+  - The 5 metric counters (**Hotels: 3**, **Rooms: 15**, **Guests: 10**, **Staff: 6**, **Reservations: 12**).
 
 ---
 
@@ -135,5 +137,25 @@ Capture the following screenshots from your actual running application and paste
   ```
 - **What to Capture**:
   - The green test execution summary:
-    `10 passed, 39 skipped in 10.37s`
-  - Showing unit schema tests, route tests, and Cypher integrity checks passing.
+    `52 passed, 2 skipped in 9.48s`
+  - Showing unit schema tests, route tests, concurrency isolation tests, and Cypher integrity checks passing.
+
+---
+
+### SS-11: Staff Directory & Live Input Modal
+- **Action**: Open `http://localhost:8000` and click the **Staff** tab.
+  - Click the **"➕ Add Staff"** button to open the modal dialog.
+  - Fill out sample fields (Staff ID: `S007`, Name: `Meera Nair`, Department: `Front Desk`).
+- **What to Capture**:
+  - The glassmorphism modal popup overlaid on the staff directory table showing department assignments.
+
+---
+
+### SS-12: Empirical Benchmark Comparison Output
+- **Action**: In your PowerShell terminal, run:
+  ```powershell
+  python scripts/benchmark.py
+  ```
+- **What to Capture**:
+  - The printed terminal benchmark table showing 50-run median latency:
+    `Relational SQL: 0.007 ms` vs `Neo4j/Graph: 0.004 ms` for the 5-hop path traversal.

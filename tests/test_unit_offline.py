@@ -53,17 +53,39 @@ class TestPydanticSchemas:
 
     def test_room_validation(self):
         room = RoomCreate(
+            room_id="RM101",
             room_no=101,
             status="Available",
             hotel_id="H001",
             category_name="Deluxe"
         )
+        assert room.room_id == "RM101"
         assert room.room_no == 101
         assert room.status == "Available"
 
         # Room number must be > 0
         with pytest.raises(ValidationError):
             RoomCreate(room_no=0, hotel_id="H001", category_name="Deluxe")
+
+    def test_staff_validation(self):
+        staff = StaffCreate(
+            staff_id="S001",
+            name="Arjun Mehta",
+            age=28,
+            salary=35000.0,
+            contact_info="9111111111",
+            dept_id="D001"
+        )
+        assert staff.staff_id == "S001"
+        assert staff.salary == 35000.0
+
+        # Invalid age (> 100)
+        with pytest.raises(ValidationError):
+            StaffCreate(staff_id="S001", name="Arjun", age=150, salary=1000, contact_info="123", dept_id="D001")
+
+        # Invalid salary (<= 0)
+        with pytest.raises(ValidationError):
+            StaffCreate(staff_id="S001", name="Arjun", age=30, salary=-500, contact_info="123", dept_id="D001")
 
     def test_room_status_update_regex(self):
         valid1 = RoomStatusUpdate(status="Available")
@@ -118,6 +140,7 @@ class TestRouteRegistrations:
             "/api/health",
             "/api/dashboard/stats",
             "/api/dashboard/room-availability",
+            "/api/dashboard/revenue-analytics",
             "/api/dashboard/recent-reservations",
             "/api/hotels/",
             "/api/hotels/{hotel_id}",
