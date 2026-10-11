@@ -7,7 +7,7 @@ const StaffComponent = {
         content.innerHTML = '<div class="loading-spinner"><div class="spinner"></div><p>Loading staff...</p></div>';
 
         try {
-            const departments = await API.getStaffByDepartment();
+            let data = await API.getStaffByDepartment();
             const headerHtml = `
                 <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;">
                     <div>
@@ -18,19 +18,46 @@ const StaffComponent = {
                 </div>
             `;
 
-            if (!departments.length) {
+            if (!Array.isArray(data) || !data.length) {
                 content.innerHTML = headerHtml + '<div class="empty-state"><div class="empty-state-icon">👥</div><p class="empty-state-text">No staff data</p></div>';
                 return;
             }
 
-            content.innerHTML = headerHtml + departments.map(dept => `
+            // Normalization: Support either grouped departments (dept.staff) or flat staff objects (s.staff_id)
+            let departments = [];
+            if (data[0] && Array.isArray(data[0].staff)) {
+                departments = data;
+            } else if (data[0] && data[0].staff_id) {
+                // Group flat staff records by department
+                const deptMap = {};
+                data.forEach(s => {
+                    const dId = s.dept_id || 'General';
+                    if (!deptMap[dId]) {
+                        deptMap[dId] = {
+                            dept_id: dId,
+                            department: s.department || s.d_role || dId,
+                            dept_head: s.dept_head || 'Department Head',
+                            hotel_name: s.hotel_name || 'Hotel Branch',
+                            staff: []
+                        };
+                    }
+                    deptMap[dId].staff.push(s);
+                });
+                departments = Object.values(deptMap);
+            } else {
+                departments = data;
+            }
+
+            content.innerHTML = headerHtml + departments.map(dept => {
+                const staffList = Array.isArray(dept.staff) ? dept.staff : [];
+                return `
                 <div class="card" style="margin-bottom:20px">
                     <div class="card-header">
                         <div>
-                            <h3 class="card-title">${dept.department} Department</h3>
-                            <p class="card-subtitle">${dept.hotel_name} · Head: ${dept.dept_head} · ID: ${dept.dept_id}</p>
+                            <h3 class="card-title">${dept.department || 'Department'}</h3>
+                            <p class="card-subtitle">${dept.hotel_name || ''} · Head: ${dept.dept_head || 'N/A'} · ID: ${dept.dept_id || ''}</p>
                         </div>
-                        <span class="badge badge-active">${dept.staff.length} staff</span>
+                        <span class="badge badge-active">${staffList.length} staff</span>
                     </div>
                     <div class="table-wrapper">
                         <table>
@@ -38,13 +65,13 @@ const StaffComponent = {
                                 <th>ID</th><th>Name</th><th>Age</th><th>Salary</th><th>Contact</th><th>Action</th>
                             </tr></thead>
                             <tbody>
-                                ${dept.staff.map(s => `
+                                ${staffList.map(s => `
                                     <tr>
                                         <td>${s.staff_id}</td>
                                         <td><strong>${s.name}</strong></td>
                                         <td>${s.age}</td>
-                                        <td>₹${s.salary?.toLocaleString()}</td>
-                                        <td>${s.contact_info}</td>
+                                        <td>₹${s.salary ? Number(s.salary).toLocaleString() : '0'}</td>
+                                        <td>${s.contact_info || '-'}</td>
                                         <td><button class="btn btn-sm btn-secondary" onclick="StaffComponent.showReservations('${s.staff_id}')">Reservations</button></td>
                                     </tr>
                                 `).join('')}
@@ -52,7 +79,7 @@ const StaffComponent = {
                         </table>
                     </div>
                 </div>
-            `).join('');
+            `}).join('');
         } catch (e) {
             content.innerHTML = `<div class="empty-state"><p class="empty-state-text">⚠️ ${e.message}</p></div>`;
         }
@@ -123,19 +150,19 @@ const StaffComponent = {
         try {
             const data = await API.getStaffReservations(staffId);
             const body = `
-                <p style="color:var(--text-secondary);margin-bottom:16px">Staff: <strong>${data.staff_name}</strong> (${data.staff_id})</p>
-                ${data.reservations.length ? `
+                <p style="color:var(--text-secondary);margin-bottom:16px">Staff: <strong>${data.staff_name || 'Staff'}</strong> (${data.staff_id || staffId})</p>
+                ${(data.reservations && data.reservations.length) ? `
                     <div class="table-wrapper">
                         <table>
                             <thead><tr><th>Res ID</th><th>Guest</th><th>Room</th><th>Hotel</th><th>Check In</th><th>Status</th></tr></thead>
                             <tbody>
-                                ${data.reservations.map(r => `
+                                ${(data.reservations || []).map(r => `
                                     <tr>
                                         <td>${r.res_id}</td>
-                                        <td>${r.guest_name}</td>
-                                        <td>${r.room_no}</td>
-                                        <td>${r.hotel_name}</td>
-                                        <td>${r.check_in_date || '-'}</td>
+                                        <td>${r.guest_name || 'Guest'}</td>
+                                        <td>${r.room_no || '-'}</td>
+                                        <td>${r.hotel_name || 'Hotel'}</td>
+                                        <td>${r.check_in_date || r.check_in || '-'}</td>
                                         <td>${App.statusBadge(r.status)}</td>
                                     </tr>
                                 `).join('')}

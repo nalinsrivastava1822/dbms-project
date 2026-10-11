@@ -638,7 +638,35 @@ class MockGraphStore:
                 })
             return results
 
-        # List Staff
+        # Staff by Department (Grouped with staff array)
+        if "dept_head" in q or "COLLECT({staff_id" in q:
+            target_dept = params.get("dept_id")
+            results = []
+            for d_id, d in sorted(self.departments.items()):
+                if target_dept and d_id != target_dept:
+                    continue
+                h = self.hotels.get(d.get("hotel_id"), {})
+                dept_staff = [
+                    {
+                        "staff_id": s["staff_id"],
+                        "name": s["name"],
+                        "age": s["age"],
+                        "salary": s["salary"],
+                        "contact_info": s["contact_info"]
+                    }
+                    for s_id, s in sorted(self.staff.items())
+                    if s.get("dept_id") == d_id
+                ]
+                results.append({
+                    "dept_id": d["dept_id"],
+                    "department": d.get("d_role", "N/A"),
+                    "dept_head": d.get("d_head", "N/A"),
+                    "hotel_name": h.get("name", "N/A"),
+                    "staff": dept_staff
+                })
+            return results
+
+        # List Staff (Flat list with reservations processed)
         if ("HAS_DEPARTMENT" in q and "EMPLOYS" in q and "Staff" in q) or "list_staff" in q:
             results = []
             for s_id, s in sorted(self.staff.items()):
@@ -661,16 +689,6 @@ class MockGraphStore:
                 })
             return results
 
-        # Staff by Department
-        if "MATCH (d:Department {dept_id: $dept_id})-[:EMPLOYS]->(s:Staff)" in q:
-            d_id = params.get("dept_id")
-            results = []
-            for s in self.staff.values():
-                if s["dept_id"] == d_id:
-                    results.append(s)
-            results.sort(key=lambda x: x["name"])
-            return results
-
         # Staff Reservations
         if "MATCH (s:Staff {staff_id: $staff_id})-[:PROCESSES]->(res:Reservation)" in q:
             s_id = params.get("staff_id")
@@ -678,13 +696,18 @@ class MockGraphStore:
             for r in self.reservations.values():
                 if r.get("staff_id") == s_id:
                     g = self.guests.get(r["guest_id"], {})
+                    rm = self.rooms.get(r["room_no"], {})
+                    h = self.hotels.get(rm.get("hotel_id"), {})
                     results.append({
                         "res_id": r["res_id"],
                         "check_in": str(r["check_in_date"]),
+                        "check_in_date": str(r["check_in_date"]),
                         "check_out": str(r["check_out_date"]),
+                        "check_out_date": str(r["check_out_date"]),
                         "status": r["status"],
                         "room_no": r["room_no"],
                         "guest_name": g.get("name", "Unknown"),
+                        "hotel_name": h.get("name", "Grand Palace Hotel"),
                     })
             results.sort(key=lambda x: x["check_in"], reverse=True)
             return results
