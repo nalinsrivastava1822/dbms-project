@@ -2,20 +2,36 @@
 Reservations API — Create, list, cancel reservations with validation.
 Uses transactions for consistent booking updates.
 """
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Query
 from backend.database import db
 from backend.models.schemas import ReservationCreate
+from typing import Optional
+from datetime import date
 
 router = APIRouter(prefix="/api/reservations", tags=["Reservations"])
 
 
 @router.get("/")
-def list_reservations():
-    """List all reservations with guest, room, hotel, and staff details."""
-    query = """
+def list_reservations(
+    guest_id: Optional[str] = Query(None),
+    caller_guest_id: Optional[str] = Query(None),
+):
+    """
+    List reservations.
+    If caller_guest_id is provided, enforces that a guest can only view their own reservations.
+    """
+    if caller_guest_id and guest_id and caller_guest_id != guest_id:
+        raise HTTPException(status_code=403, detail="Forbidden: You cannot view another guest's reservations")
+
+    target_guest_id = guest_id or caller_guest_id
+    where_clause = "WHERE g.guest_id = $guest_id" if target_guest_id else ""
+    params = {"guest_id": target_guest_id} if target_guest_id else {}
+
+    query = f"""
     MATCH (g:Guest)-[:MADE]->(res:Reservation)-[:BOOKS]->(r:Room)<-[:HAS_ROOM]-(h:Hotel)
     OPTIONAL MATCH (s:Staff)-[:PROCESSES]->(res)
     OPTIONAL MATCH (r)-[:BELONGS_TO]->(c:RoomCategory)
+    {where_clause}
     RETURN res.res_id AS res_id, res.check_in_date AS check_in_date,
            res.check_out_date AS check_out_date, res.status AS status,
            g.guest_id AS guest_id, g.name AS guest_name,
@@ -24,13 +40,53 @@ def list_reservations():
            s.staff_id AS staff_id, s.name AS staff_name
     ORDER BY res.check_in_date DESC
     """
-    results = db.execute_read(query)
+    results = db.execute_read(query, params)
     for r in results:
         if r.get("check_in_date"):
             r["check_in_date"] = str(r["check_in_date"])
         if r.get("check_out_date"):
             r["check_out_date"] = str(r["check_out_date"])
+        try:
+            d_in = date.fromisoformat(r["check_in_date"])
+            d_out = date.fromisoformat(r["check_out_date"])
+            nights = max(1, (d_out - d_in).days)
+            r["nights"] = nights
+            r["estimated_total_price"] = round(float(r.get("rent", 0.0)) * nights, 2)
+        except Exception:
+            pass
     return results
+
+
+def _next_res_id_in_tx(tx) -> str:
+    """Find next sequential reservation ID inside a transaction."""
+    records = tx.run("MATCH (r:Reservation) RETURN r.res_id AS res_id").data()
+    max_num = 0
+    for r in records:
+        rid = r.get("res_id") or ""
+        if rid.startswith("R") and rid[1:].isdigit():
+            try:
+                max_num = max(max_num, int(rid[1:]))
+            except ValueError:
+                pass
+    return f"R{max_num + 1:03d}"
+
+
+@router.get("/next-id")
+def get_next_reservation_id():
+    """Find the next sequential Reservation ID (e.g., R010, R011)."""
+    query = "MATCH (r:Reservation) RETURN r.res_id AS res_id"
+    results = db.execute_read(query)
+    max_num = 0
+    for r in results:
+        rid = r.get("res_id") or ""
+        if rid.startswith("R") and rid[1:].isdigit():
+            try:
+                max_num = max(max_num, int(rid[1:]))
+            except ValueError:
+                pass
+    return {"next_id": f"R{max_num + 1:03d}"}
+
+
 @router.post("/", status_code=201)
 def create_reservation(reservation: ReservationCreate):
     """
@@ -40,6 +96,7 @@ def create_reservation(reservation: ReservationCreate):
     - Rejects room if currently under Maintenance.
     - Rejects if Guest or Staff does not exist.
     - Rejects if an active/confirmed booking overlaps the requested dates.
+    - Auto-generates sequential reservation reference if omitted.
     - Atomically creates reservation node and relationships in one transaction callback.
     """
     # 1. Validate dates
@@ -55,24 +112,31 @@ def create_reservation(reservation: ReservationCreate):
             detail="Either room_id or room_no must be provided"
         )
 
+    staff_id = reservation.staff_id or "S001"
+    nights = (reservation.check_out_date - reservation.check_in_date).days
+
     payload = {
         "res_id": reservation.res_id,
         "guest_id": reservation.guest_id,
         "room_id": reservation.room_id,
         "room_no": reservation.room_no,
-        "staff_id": reservation.staff_id,
+        "staff_id": staff_id,
         "check_in": str(reservation.check_in_date),
         "check_out": str(reservation.check_out_date),
+        "nights": nights,
     }
 
     def _atomic_booking_tx(tx):
-        # A. Check duplicate reservation ID
-        dup = tx.run(
-            "MATCH (r:Reservation {res_id: $res_id}) RETURN r.res_id AS res_id",
-            {"res_id": payload["res_id"]}
-        ).single()
-        if dup:
-            raise HTTPException(status_code=409, detail=f"Reservation {payload['res_id']} already exists")
+        # A. Resolve or generate reservation ID
+        if not payload.get("res_id"):
+            payload["res_id"] = _next_res_id_in_tx(tx)
+        else:
+            dup = tx.run(
+                "MATCH (r:Reservation {res_id: $res_id}) RETURN r.res_id AS res_id",
+                {"res_id": payload["res_id"]}
+            ).single()
+            if dup:
+                raise HTTPException(status_code=409, detail=f"Reservation {payload['res_id']} already exists")
 
         # B. Verify guest exists
         guest = tx.run(
@@ -100,13 +164,18 @@ def create_reservation(reservation: ReservationCreate):
                 detail=f"Room {room['room_no']} is currently under maintenance and cannot be booked"
             )
 
-        # D. Verify staff exists
+        # D. Verify staff exists (fallback to default S001 if provided staff doesn't exist)
         staff = tx.run(
             "MATCH (s:Staff {staff_id: $staff_id}) RETURN s.name AS name",
             {"staff_id": payload["staff_id"]}
         ).single()
         if not staff:
-            raise HTTPException(status_code=404, detail=f"Staff {payload['staff_id']} not found")
+            default_staff = tx.run("MATCH (s:Staff) RETURN s.staff_id AS staff_id, s.name AS name LIMIT 1").single()
+            if default_staff:
+                payload["staff_id"] = default_staff["staff_id"]
+                staff = default_staff
+            else:
+                raise HTTPException(status_code=404, detail=f"Staff {payload['staff_id']} not found")
 
         # E. Check for overlapping active reservations on the same room
         overlap_query = """
@@ -144,31 +213,50 @@ def create_reservation(reservation: ReservationCreate):
         MERGE (res)-[:BOOKS]->(r)
         MERGE (s)-[:PROCESSES]->(res)
         RETURN res.res_id AS res_id, res.status AS status,
-               g.name AS guest_name, coalesce(r.room_id, 'RM' + toString(r.room_no)) AS room_id,
+               toString(res.check_in_date) AS check_in_date,
+               toString(res.check_out_date) AS check_out_date,
+               g.guest_id AS guest_id, g.name AS guest_name,
+               coalesce(r.room_id, 'RM' + toString(r.room_no)) AS room_id,
                r.room_no AS room_no, s.name AS staff_name
         """
         record = tx.run(create_query, payload).single()
-        return dict(record) if record else {"res_id": payload["res_id"], "status": "Confirmed"}
+        res_data = dict(record) if record else {"res_id": payload["res_id"], "status": "Confirmed"}
+        res_data["nights"] = nights
+        return res_data
 
     return db.run_write_transaction(_atomic_booking_tx)
 
 
 @router.post("/{res_id}/cancel")
-def cancel_reservation(res_id: str):
+def cancel_reservation(res_id: str, caller_guest_id: Optional[str] = Query(None)):
     """
     Cancel a reservation atomically.
+    If caller_guest_id is provided, ensures only the booking owner can cancel.
     Cancelled reservations no longer block future date availability.
     Physical maintenance status of the room is preserved.
     """
     def _cancel_tx(tx):
         res = tx.run(
-            "MATCH (res:Reservation {res_id: $res_id}) RETURN res.status AS status",
+            """
+            MATCH (res:Reservation {res_id: $res_id})
+            OPTIONAL MATCH (g:Guest)-[:MADE]->(res)
+            RETURN res.status AS status, g.guest_id AS guest_id
+            """,
             {"res_id": res_id}
         ).single()
         if not res:
             raise HTTPException(status_code=404, detail=f"Reservation {res_id} not found")
 
         current_status = res["status"]
+        booking_guest_id = res.get("guest_id")
+
+        # Guest authorization check: only allow guests to cancel their own reservations
+        if caller_guest_id and booking_guest_id and caller_guest_id != booking_guest_id:
+            raise HTTPException(
+                status_code=403,
+                detail="Forbidden: You can only cancel reservations belonging to your own account"
+            )
+
         if current_status == "Cancelled":
             raise HTTPException(status_code=400, detail="Reservation is already cancelled")
         if current_status == "Completed":

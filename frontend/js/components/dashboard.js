@@ -4,7 +4,41 @@
 const DashboardComponent = {
     async render() {
         const content = document.getElementById('content-area');
+        const session = Auth.getSession();
+
+        let guestWelcomeHTML = '';
+        if (session && session.role === 'guest') {
+            guestWelcomeHTML = `
+                <div class="card guest-welcome-card" style="margin-bottom:20px;background:linear-gradient(135deg, rgba(52, 211, 153, 0.08), rgba(34, 211, 238, 0.04));border:1px solid rgba(52, 211, 153, 0.25);border-radius:14px;padding:20px 24px">
+                    <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:16px">
+                        <div style="display:flex;align-items:center;gap:14px">
+                            <div style="width:48px;height:48px;border-radius:12px;background:linear-gradient(135deg,#34d399,#22d3ee);display:flex;align-items:center;justify-content:center;font-size:1.5rem;box-shadow:0 4px 14px rgba(52,211,153,0.3)">
+                                👤
+                            </div>
+                            <div>
+                                <h3 style="margin:0;font-size:1.25rem;color:var(--text-primary)">
+                                    Welcome, <span style="color:#34d399">${session.displayName || 'Guest'}</span>!
+                                    ${session.is_new ? '<span class="badge badge-active" style="margin-left:8px;font-size:0.75rem;vertical-align:middle">✨ Newly Created in Neo4j</span>' : ''}
+                                </h3>
+                                <p style="margin:4px 0 0;color:var(--text-secondary);font-size:0.88rem">
+                                    Guest ID: <strong style="color:var(--text-primary)">${session.guest_id || 'Active'}</strong> ·
+                                    Nationality: <span>${session.nationality || 'Indian'}</span> ·
+                                    Contact: <span>${session.email || 'Registered'}</span>
+                                </p>
+                            </div>
+                        </div>
+                        <div style="display:flex;gap:10px;flex-wrap:wrap">
+                            <button class="btn btn-sm btn-secondary" onclick="App.navigate('rooms')">🛏️ Browse Rooms</button>
+                            <button class="btn btn-sm btn-secondary" onclick="App.navigate('recommendations')">✨ My Recommendations</button>
+                            <button class="btn btn-sm btn-primary" onclick="App.navigate('guests')">👥 View in Guest Directory</button>
+                        </div>
+                    </div>
+                </div>
+            `;
+        }
+
         content.innerHTML = `
+            ${guestWelcomeHTML}
             <div class="stats-grid" id="stats-grid">
                 <div class="stat-card blue"><div class="spinner" style="margin:20px auto"></div></div>
                 <div class="stat-card green"><div class="spinner" style="margin:20px auto"></div></div>

@@ -56,6 +56,7 @@ const GuestsComponent = {
             el.innerHTML = '<div class="empty-state"><div class="empty-state-icon">👤</div><p class="empty-state-text">No guests found</p></div>';
             return;
         }
+        const session = Auth.getSession();
         el.innerHTML = `
             <div class="table-wrapper">
                 <table>
@@ -63,17 +64,22 @@ const GuestsComponent = {
                         <th>ID</th><th>Name</th><th>Contact</th><th>Nationality</th><th>Gender</th><th>Reservations</th><th>Action</th>
                     </tr></thead>
                     <tbody>
-                        ${guests.map(g => `
-                            <tr class="clickable-row" onclick="GuestsComponent.showDetail('${g.guest_id}')">
-                                <td>${g.guest_id}</td>
-                                <td><strong>${g.name}</strong></td>
+                        ${guests.map(g => {
+                            const isCurrentGuest = session && session.guest_id === g.guest_id;
+                            return `
+                            <tr class="clickable-row ${isCurrentGuest ? 'highlight-current-guest' : ''}" style="${isCurrentGuest ? 'background:rgba(52,211,153,0.06);border-left:3px solid var(--accent-green)' : ''}" onclick="GuestsComponent.showDetail('${g.guest_id}')">
+                                <td><strong>${g.guest_id}</strong></td>
+                                <td>
+                                    <strong>${g.name}</strong>
+                                    ${isCurrentGuest ? '<span class="badge" style="margin-left:6px;background:rgba(52,211,153,0.2);color:#34d399;font-size:0.72rem;padding:2px 6px">You</span>' : ''}
+                                </td>
                                 <td>${g.contact_info}</td>
                                 <td>${g.nationality}</td>
                                 <td>${g.gender}</td>
                                 <td><span class="badge badge-active">${g.reservation_count}</span></td>
                                 <td><button class="btn btn-sm btn-secondary" onclick="event.stopPropagation();GuestsComponent.showDetail('${g.guest_id}')">View</button></td>
                             </tr>
-                        `).join('')}
+                        `;}).join('')}
                     </tbody>
                 </table>
             </div>
@@ -83,9 +89,11 @@ const GuestsComponent = {
     async showDetail(guestId) {
         try {
             const guest = await API.getGuest(guestId);
+            const session = Auth.getSession();
+            const isMe = session && session.guest_id === guest.guest_id;
             const body = `
                 <ul class="detail-list">
-                    <li><span class="detail-label">Guest ID</span><span class="detail-value">${guest.guest_id}</span></li>
+                    <li><span class="detail-label">Guest ID</span><span class="detail-value">${guest.guest_id} ${isMe ? '<span class="badge" style="background:rgba(52,211,153,0.2);color:#34d399;font-size:0.75rem">You (Logged In)</span>' : ''}</span></li>
                     <li><span class="detail-label">Name</span><span class="detail-value">${guest.name}</span></li>
                     <li><span class="detail-label">Contact</span><span class="detail-value">${guest.contact_info}</span></li>
                     <li><span class="detail-label">Nationality</span><span class="detail-value">${guest.nationality}</span></li>
@@ -119,39 +127,46 @@ const GuestsComponent = {
         }
     },
 
-    showAddForm() {
+    async showAddForm() {
+        let nextId = 'G009';
+        try {
+            const res = await API.getNextGuestId();
+            if (res && res.next_id) nextId = res.next_id;
+        } catch (e) {
+            console.warn('Could not fetch next guest id:', e);
+        }
+
         const body = `
             <form id="add-guest-form" onsubmit="GuestsComponent.submitAdd(event)">
                 <div class="form-row">
                     <div class="form-group">
-                        <label class="form-label">Guest ID</label>
-                        <input type="text" class="form-input" id="new-guest-id" required placeholder="e.g. G009">
+                        <label class="form-label">Guest ID (Auto-suggested)</label>
+                        <input type="text" class="form-input" id="new-guest-id" value="${nextId}" required placeholder="e.g. ${nextId}">
                     </div>
                     <div class="form-group">
-                        <label class="form-label">Name</label>
+                        <label class="form-label">Full Name</label>
                         <input type="text" class="form-input" id="new-guest-name" required placeholder="Full name">
                     </div>
                 </div>
                 <div class="form-row">
                     <div class="form-group">
-                        <label class="form-label">Contact</label>
-                        <input type="text" class="form-input" id="new-guest-contact" required placeholder="Phone number">
+                        <label class="form-label">Contact / Email / Phone</label>
+                        <input type="text" class="form-input" id="new-guest-contact" required placeholder="Email or phone">
                     </div>
                     <div class="form-group">
                         <label class="form-label">Nationality</label>
-                        <input type="text" class="form-input" id="new-guest-nat" required placeholder="e.g. Indian">
+                        <input type="text" class="form-input" id="new-guest-nat" value="Indian" required placeholder="e.g. Indian">
                     </div>
                 </div>
                 <div class="form-group">
                     <label class="form-label">Gender</label>
                     <select class="form-select" id="new-guest-gender" required>
-                        <option value="">Select</option>
                         <option value="Male">Male</option>
                         <option value="Female">Female</option>
                         <option value="Other">Other</option>
                     </select>
                 </div>
-                <button type="submit" class="btn btn-primary" style="width:100%;margin-top:8px">Add Guest</button>
+                <button type="submit" class="btn btn-primary" style="width:100%;margin-top:8px">+ Create Guest Node in Neo4j</button>
             </form>
         `;
         App.showModal('Add New Guest', body);
@@ -160,15 +175,15 @@ const GuestsComponent = {
     async submitAdd(e) {
         e.preventDefault();
         const data = {
-            guest_id: document.getElementById('new-guest-id').value.trim(),
+            guest_id: document.getElementById('new-guest-id').value.trim() || undefined,
             name: document.getElementById('new-guest-name').value.trim(),
             contact_info: document.getElementById('new-guest-contact').value.trim(),
             nationality: document.getElementById('new-guest-nat').value.trim(),
             gender: document.getElementById('new-guest-gender').value,
         };
         try {
-            await API.createGuest(data);
-            App.toast(`Guest ${data.name} added!`, 'success');
+            const created = await API.createGuest(data);
+            App.toast(`Guest ${created.name} (${created.guest_id || data.guest_id}) created in Neo4j!`, 'success');
             App.closeModal();
             this.loadGuests();
         } catch (e) {

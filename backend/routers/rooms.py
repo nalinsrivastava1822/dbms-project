@@ -4,6 +4,7 @@ Rooms API — CRUD and search operations for Room entities.
 from fastapi import APIRouter, HTTPException, Query
 from backend.database import db
 from backend.models.schemas import RoomCreate, RoomStatusUpdate
+from datetime import date
 from typing import Optional
 
 router = APIRouter(prefix="/api/rooms", tags=["Rooms"])
@@ -26,6 +27,7 @@ def list_rooms():
 @router.get("/search")
 def search_rooms(
     hotel_id: Optional[str] = Query(None),
+    location: Optional[str] = Query(None),
     category: Optional[str] = Query(None),
     max_rent: Optional[float] = Query(None),
     status: Optional[str] = Query(None, pattern=r"^(Available|Occupied|Maintenance)$"),
@@ -33,9 +35,12 @@ def search_rooms(
     check_out_date: Optional[str] = Query(None),
 ):
     """
-    Search rooms by hotel, category, rent, and/or date-dependent availability.
-    When check_in_date and check_out_date are provided, rooms under Maintenance
-    or with overlapping active reservations are filtered out.
+    Search rooms by hotel, location, category, rent, and/or date-dependent availability.
+    When check_in_date and check_out_date are provided:
+    - Rejects invalid date formats or check_out <= check_in with HTTP 400.
+    - Excludes rooms under Maintenance or with overlapping active/confirmed reservations.
+    - Calculates stay duration (nights) and estimated total price.
+    - Does not rely on current status alone for future dates.
     """
     conditions = []
     params = {}
@@ -43,18 +48,37 @@ def search_rooms(
     if hotel_id:
         conditions.append("h.hotel_id = $hotel_id")
         params["hotel_id"] = hotel_id
+    if location:
+        conditions.append("(toLower(h.location) CONTAINS toLower($location) OR toLower(h.name) CONTAINS toLower($location))")
+        params["location"] = location
     if category:
         conditions.append("c.category_name = $category")
         params["category"] = category
     if max_rent is not None:
         conditions.append("c.rent <= $max_rent")
         params["max_rent"] = max_rent
-    if status:
-        conditions.append("r.status = $status")
-        params["status"] = status
 
-    if check_in_date and check_out_date:
+    nights = None
+    if check_in_date or check_out_date:
+        if not check_in_date or not check_out_date:
+            raise HTTPException(
+                status_code=400,
+                detail="Both check_in_date and check_out_date are required for date availability search"
+            )
+        try:
+            d_in = date.fromisoformat(check_in_date)
+            d_out = date.fromisoformat(check_out_date)
+        except ValueError:
+            raise HTTPException(status_code=400, detail="Invalid date format. Expected YYYY-MM-DD")
+
+        if d_out <= d_in:
+            raise HTTPException(status_code=400, detail="Check-out date must be strictly after check-in date")
+
+        nights = (d_out - d_in).days
+
+        # Exclude rooms under physical maintenance
         conditions.append("r.status <> 'Maintenance'")
+        # Exclude rooms with overlapping active or confirmed reservations
         conditions.append("""NOT EXISTS {
             MATCH (res:Reservation)-[:BOOKS]->(r)
             WHERE res.status IN ['Active', 'Confirmed']
@@ -63,6 +87,9 @@ def search_rooms(
         }""")
         params["check_in_date"] = check_in_date
         params["check_out_date"] = check_out_date
+    elif status:
+        conditions.append("r.status = $status")
+        params["status"] = status
 
     where_clause = "WHERE " + " AND ".join(conditions) if conditions else ""
 
@@ -75,7 +102,17 @@ def search_rooms(
            h.hotel_id AS hotel_id, h.name AS hotel_name, h.location AS location
     ORDER BY c.rent, r.room_no
     """
-    return db.execute_read(query, params)
+    rooms = db.execute_read(query, params)
+
+    if nights is not None:
+        for r in rooms:
+            r["nights"] = nights
+            r["check_in_date"] = check_in_date
+            r["check_out_date"] = check_out_date
+            rent = float(r.get("rent", 0.0))
+            r["estimated_total_price"] = round(rent * nights, 2)
+
+    return rooms
 
 
 @router.get("/categories")

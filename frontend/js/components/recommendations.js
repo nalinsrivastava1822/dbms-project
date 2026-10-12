@@ -13,6 +13,10 @@ const RecommendationsComponent = {
             return;
         }
 
+        const session = Auth.getSession();
+        const activeGuestId = session ? session.guest_id : '';
+        const defaultNat = (session && session.nationality) ? session.nationality : 'Indian';
+
         content.innerHTML = `
             <div class="rec-explanation">
                 <strong>Graph-Powered Recommendations</strong><br>
@@ -34,7 +38,7 @@ const RecommendationsComponent = {
                     <div class="form-group">
                         <select class="form-select" id="rec-hotel-guest">
                             <option value="">Select a guest</option>
-                            ${guests.map(g => `<option value="${g.guest_id}">${g.name} (${g.guest_id})</option>`).join('')}
+                            ${guests.map(g => `<option value="${g.guest_id}" ${g.guest_id === activeGuestId ? 'selected' : ''}>${g.name} (${g.guest_id})${g.guest_id === activeGuestId ? ' - You' : ''}</option>`).join('')}
                         </select>
                     </div>
                     <button class="btn btn-primary btn-sm" onclick="RecommendationsComponent.getHotelRecs()">Get Recommendations</button>
@@ -50,7 +54,7 @@ const RecommendationsComponent = {
                     <div class="form-group">
                         <select class="form-select" id="rec-room-guest">
                             <option value="">Select a guest</option>
-                            ${guests.map(g => `<option value="${g.guest_id}">${g.name} (${g.guest_id})</option>`).join('')}
+                            ${guests.map(g => `<option value="${g.guest_id}" ${g.guest_id === activeGuestId ? 'selected' : ''}>${g.name} (${g.guest_id})${g.guest_id === activeGuestId ? ' - You' : ''}</option>`).join('')}
                         </select>
                     </div>
                     <button class="btn btn-primary btn-sm" onclick="RecommendationsComponent.getRoomRecs()">Get Suggestions</button>
@@ -64,7 +68,7 @@ const RecommendationsComponent = {
                         <p class="card-subtitle">Where compatriots stay</p></div>
                     </div>
                     <div class="form-group">
-                        <input type="text" class="form-input" id="rec-nationality" placeholder="e.g. Indian">
+                        <input type="text" class="form-input" id="rec-nationality" value="${defaultNat}" placeholder="e.g. Indian">
                     </div>
                     <button class="btn btn-primary btn-sm" onclick="RecommendationsComponent.getNatRecs()">Search</button>
                     <div id="rec-nat-results" style="margin-top:16px"></div>
@@ -79,7 +83,7 @@ const RecommendationsComponent = {
                     <div class="form-group">
                         <select class="form-select" id="rec-journey-guest">
                             <option value="">Select a guest</option>
-                            ${guests.map(g => `<option value="${g.guest_id}">${g.name} (${g.guest_id})</option>`).join('')}
+                            ${guests.map(g => `<option value="${g.guest_id}" ${g.guest_id === activeGuestId ? 'selected' : ''}>${g.name} (${g.guest_id})${g.guest_id === activeGuestId ? ' - You' : ''}</option>`).join('')}
                         </select>
                     </div>
                     <button class="btn btn-primary btn-sm" onclick="RecommendationsComponent.getJourney()">Trace Journey</button>

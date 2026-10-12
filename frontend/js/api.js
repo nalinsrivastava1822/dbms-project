@@ -11,6 +11,22 @@ const API = {
                 headers: { 'Content-Type': 'application/json', ...options.headers },
                 ...options,
             });
+
+            // Extract real-time Cypher query traces from backend header
+            const traceHeader = response.headers.get('X-Backend-Trace');
+            if (traceHeader && window.QueryInspector && typeof window.QueryInspector.addTraces === 'function') {
+                try {
+                    const decoded = decodeURIComponent(escape(atob(traceHeader)));
+                    const traces = JSON.parse(decoded);
+                    window.QueryInspector.addTraces(traces);
+                } catch (e) {
+                    try {
+                        const traces = JSON.parse(atob(traceHeader));
+                        window.QueryInspector.addTraces(traces);
+                    } catch (_) {}
+                }
+            }
+
             const data = await response.json();
             if (!response.ok) {
                 throw new Error(data.detail || `HTTP ${response.status}`);
@@ -56,13 +72,32 @@ const API = {
         Object.entries(params).forEach(([k, v]) => { if (v) query.set(k, v); });
         return API.request(`/api/guests/search?${query.toString()}`);
     },
-    getGuest: (id) => API.request(`/api/guests/${id}`),
+    getGuest: (id, callerGuestId) => {
+        const q = callerGuestId ? `?caller_guest_id=${encodeURIComponent(callerGuestId)}` : '';
+        return API.request(`/api/guests/${id}${q}`);
+    },
+    getGuestReservations: (id, callerGuestId) => {
+        const q = callerGuestId ? `?caller_guest_id=${encodeURIComponent(callerGuestId)}` : '';
+        return API.request(`/api/guests/${id}/reservations${q}`);
+    },
     createGuest: (data) => API.request('/api/guests/', { method: 'POST', body: JSON.stringify(data) }),
+    loginGuest: (data) => API.request('/api/guests/login', { method: 'POST', body: JSON.stringify(data) }),
+    getNextGuestId: () => API.request('/api/guests/next-id'),
 
     // Reservations
-    getReservations: () => API.request('/api/reservations/'),
+    getReservations: (guestId, callerGuestId) => {
+        const params = new URLSearchParams();
+        if (guestId) params.set('guest_id', guestId);
+        if (callerGuestId) params.set('caller_guest_id', callerGuestId);
+        const qs = params.toString() ? `?${params.toString()}` : '';
+        return API.request(`/api/reservations/${qs}`);
+    },
+    getNextReservationId: () => API.request('/api/reservations/next-id'),
     createReservation: (data) => API.request('/api/reservations/', { method: 'POST', body: JSON.stringify(data) }),
-    cancelReservation: (id) => API.request(`/api/reservations/${id}/cancel`, { method: 'POST' }),
+    cancelReservation: (id, callerGuestId) => {
+        const q = callerGuestId ? `?caller_guest_id=${encodeURIComponent(callerGuestId)}` : '';
+        return API.request(`/api/reservations/${id}/cancel${q}`, { method: 'POST' });
+    },
 
     // Staff
     getStaff: () => API.request('/api/staff/'),
@@ -85,4 +120,8 @@ const API = {
 
     // Health
     health: () => API.request('/api/health'),
+
+    // Query Inspector
+    getQueryHistory: () => API.request('/api/query-inspector/history'),
+    clearQueryHistory: () => API.request('/api/query-inspector/clear', { method: 'POST' }),
 };

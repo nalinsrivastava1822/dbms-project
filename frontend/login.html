@@ -1,0 +1,234 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="Hotel Management System — Login to access the Neo4j-powered hotel dashboard">
+    <title>Login — HotelMS</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/css/login.css">
+</head>
+<body>
+
+    <!-- Animated Background Orbs -->
+    <div class="bg-orbs" aria-hidden="true">
+        <div class="orb orb-1"></div>
+        <div class="orb orb-2"></div>
+        <div class="orb orb-3"></div>
+        <div class="orb orb-4"></div>
+    </div>
+
+    <!-- Floating Particles -->
+    <canvas id="particles-canvas" aria-hidden="true"></canvas>
+
+    <!-- Login Container -->
+    <main class="login-wrapper">
+        <div class="login-card" id="login-card">
+
+            <!-- Header / Brand -->
+            <div class="login-header">
+                <div class="brand-logo">
+                    <span class="brand-icon">◈</span>
+                </div>
+                <h1 class="brand-name">HotelMS</h1>
+                <p class="brand-tagline">Neo4j-Powered Hotel Management</p>
+            </div>
+
+            <!-- Role Selector Tabs -->
+            <div class="role-tabs" id="role-tabs">
+                <button class="role-tab active" data-role="admin" id="tab-admin">
+                    <span class="role-tab-icon">🛡️</span>
+                    <span class="role-tab-label">Admin</span>
+                </button>
+                <button class="role-tab" data-role="guest" id="tab-guest">
+                    <span class="role-tab-icon">👤</span>
+                    <span class="role-tab-label">Guest</span>
+                </button>
+                <div class="tab-indicator" id="tab-indicator"></div>
+            </div>
+
+            <!-- Login Form -->
+            <form class="login-form" id="login-form" autocomplete="off">
+
+                <!-- Admin Fields -->
+                <div class="form-fields" id="admin-fields">
+                    <div class="input-group">
+                        <label for="admin-username" class="input-label">Username</label>
+                        <div class="input-wrapper">
+                            <span class="input-icon">👤</span>
+                            <input
+                                type="text"
+                                id="admin-username"
+                                class="login-input"
+                                placeholder="Enter admin username"
+                                autocomplete="username"
+                            >
+                        </div>
+                    </div>
+                    <div class="input-group">
+                        <label for="admin-password" class="input-label">Password</label>
+                        <div class="input-wrapper">
+                            <span class="input-icon">🔒</span>
+                            <input
+                                type="password"
+                                id="admin-password"
+                                class="login-input"
+                                placeholder="Enter admin password"
+                                autocomplete="current-password"
+                            >
+                            <button type="button" class="toggle-password" id="toggle-admin-pw" aria-label="Toggle password visibility">
+                                <span class="eye-icon" id="eye-admin">👁️</span>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Guest Fields -->
+                <div class="form-fields hidden" id="guest-fields">
+                    <div class="input-group">
+                        <label for="guest-select-existing" class="input-label">Sign in Mode</label>
+                        <div class="input-wrapper">
+                            <span class="input-icon">📋</span>
+                            <select id="guest-select-existing" class="login-input" style="appearance:auto;cursor:pointer">
+                                <option value="__auto__">✨ Auto-Detect (Sign In or Register)</option>
+                                <option value="__new__">+ Register as New Guest</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <div id="guest-input-container">
+                        <div class="input-group" id="guest-id-group">
+                            <label for="guest-id" class="input-label">Guest ID (optional for returning guests)</label>
+                            <div class="input-wrapper">
+                                <span class="input-icon">🆔</span>
+                                <input
+                                    type="text"
+                                    id="guest-id"
+                                    class="login-input"
+                                    placeholder="e.g. G001 (optional)"
+                                    autocomplete="off"
+                                >
+                            </div>
+                        </div>
+                        <div class="input-group">
+                            <label for="guest-name" class="input-label">Full Name</label>
+                            <div class="input-wrapper">
+                                <span class="input-icon">👤</span>
+                                <input
+                                    type="text"
+                                    id="guest-name"
+                                    class="login-input"
+                                    placeholder="Enter your full name"
+                                    autocomplete="name"
+                                >
+                            </div>
+                        </div>
+                        <div class="input-group">
+                            <label for="guest-email" class="input-label">Email Address</label>
+                            <div class="input-wrapper">
+                                <span class="input-icon">✉️</span>
+                                <input
+                                    type="email"
+                                    id="guest-email"
+                                    class="login-input"
+                                    placeholder="Enter your email"
+                                    autocomplete="email"
+                                >
+                            </div>
+                        </div>
+                        <div class="input-group">
+                            <label for="guest-phone" class="input-label">Phone (optional)</label>
+                            <div class="input-wrapper">
+                                <span class="input-icon">📱</span>
+                                <input
+                                    type="tel"
+                                    id="guest-phone"
+                                    class="login-input"
+                                    placeholder="Enter phone number"
+                                    autocomplete="tel"
+                                >
+                            </div>
+                        </div>
+                        <div class="input-group" id="guest-password-group">
+                            <label for="guest-password" class="input-label">Password</label>
+                            <div class="input-wrapper">
+                                <span class="input-icon">🔒</span>
+                                <input
+                                    type="password"
+                                    id="guest-password"
+                                    class="login-input"
+                                    placeholder="Enter password (default: password123)"
+                                    autocomplete="current-password"
+                                >
+                                <button type="button" class="toggle-password" id="toggle-guest-pw" aria-label="Toggle password visibility">
+                                    <span class="eye-icon" id="eye-guest">👁️</span>
+                                </button>
+                            </div>
+                        </div>
+                        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+                            <div class="input-group">
+                                <label for="guest-nationality" class="input-label">Nationality</label>
+                                <div class="input-wrapper">
+                                    <span class="input-icon">🌍</span>
+                                    <input
+                                        type="text"
+                                        id="guest-nationality"
+                                        class="login-input"
+                                        placeholder="Indian"
+                                        value="Indian"
+                                    >
+                                </div>
+                            </div>
+                            <div class="input-group">
+                                <label for="guest-gender" class="input-label">Gender</label>
+                                <div class="input-wrapper">
+                                    <span class="input-icon">⚧</span>
+                                    <select id="guest-gender" class="login-input" style="appearance:auto">
+                                        <option value="Male">Male</option>
+                                        <option value="Female">Female</option>
+                                        <option value="Other">Other</option>
+                                    </select>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div id="guest-success-box" class="hidden" style="margin-bottom:14px;padding:10px 14px;background:rgba(52,211,153,0.15);border:1px solid rgba(52,211,153,0.35);border-radius:8px;font-size:0.85rem;color:#34d399;display:none;align-items:center;gap:8px">
+                        <span>✓</span>
+                        <span id="guest-success-text"></span>
+                    </div>
+                </div>
+
+                <!-- Error Message -->
+                <div class="login-error hidden" id="login-error">
+                    <span class="error-icon">⚠️</span>
+                    <span class="error-text" id="error-text">Invalid credentials</span>
+                </div>
+
+                <!-- Submit Button -->
+                <button type="submit" class="login-btn" id="login-btn">
+                    <span class="btn-text" id="btn-text">Sign In as Admin</span>
+                    <span class="btn-spinner hidden" id="btn-spinner"></span>
+                </button>
+            </form>
+
+            <!-- Footer Info -->
+            <div class="login-footer">
+                <p class="footer-hint" id="footer-hint">
+                    Admin credentials required for full dashboard access
+                </p>
+                <div class="footer-badge">
+                    <span class="footer-dot"></span>
+                    DBMS DA3 Project · Neo4j
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <script src="/js/api.js"></script>
+    <script src="/js/auth.js"></script>
+    <script src="/js/login.js"></script>
+</body>
+</html>

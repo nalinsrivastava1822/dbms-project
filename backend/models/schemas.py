@@ -54,27 +54,29 @@ class StaffCreate(BaseModel):
 
 # --- Guest ---
 class GuestCreate(BaseModel):
-    guest_id: str = Field(..., min_length=1, max_length=10)
+    guest_id: Optional[str] = Field(None, min_length=1, max_length=10)
     name: str = Field(..., min_length=1, max_length=100)
-    contact_info: str = Field(..., min_length=1, max_length=20)
-    nationality: str = Field(..., min_length=1, max_length=50)
-    gender: str = Field(..., pattern=r"^(Male|Female|Other)$")
+    contact_info: str = Field(..., min_length=1, max_length=100)
+    nationality: str = Field(default="Indian", min_length=1, max_length=50)
+    gender: str = Field(default="Other", pattern=r"^(Male|Female|Other)$")
+    password: Optional[str] = Field(None, min_length=4, max_length=100)
 
 
 # --- Reservation ---
 class ReservationCreate(BaseModel):
-    res_id: str = Field(..., min_length=1, max_length=20)
+    res_id: Optional[str] = Field(None, min_length=1, max_length=20)
     check_in_date: date
     check_out_date: date
     guest_id: str = Field(..., min_length=1)
     room_id: Optional[str] = Field(None, min_length=1, max_length=20)
     room_no: Optional[int] = Field(None, gt=0)
-    staff_id: str = Field(..., min_length=1)
+    staff_id: Optional[str] = Field(default="S001", min_length=1)
 
 
 # --- Room Search ---
 class RoomSearch(BaseModel):
     hotel_id: Optional[str] = None
+    location: Optional[str] = None
     category_name: Optional[str] = None
     max_rent: Optional[float] = None
     status: Optional[str] = None

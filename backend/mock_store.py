@@ -94,14 +94,14 @@ class MockGraphStore:
         }
 
         self.guests = {
-            "G001": {"guest_id": "G001", "name": "John Smith", "contact_info": "1234567890", "nationality": "American", "gender": "Male"},
-            "G002": {"guest_id": "G002", "name": "Aisha Khan", "contact_info": "2345678901", "nationality": "Indian", "gender": "Female"},
-            "G003": {"guest_id": "G003", "name": "Carlos Rivera", "contact_info": "3456789012", "nationality": "Mexican", "gender": "Male"},
-            "G004": {"guest_id": "G004", "name": "Emily Chen", "contact_info": "4567890123", "nationality": "Chinese", "gender": "Female"},
-            "G005": {"guest_id": "G005", "name": "Ravi Iyer", "contact_info": "5678901234", "nationality": "Indian", "gender": "Male"},
-            "G006": {"guest_id": "G006", "name": "Sophie Martin", "contact_info": "6789012345", "nationality": "French", "gender": "Female"},
-            "G007": {"guest_id": "G007", "name": "David Brown", "contact_info": "7890123456", "nationality": "American", "gender": "Male"},
-            "G008": {"guest_id": "G008", "name": "Nisha Gupta", "contact_info": "8901234567", "nationality": "Indian", "gender": "Female"},
+            "G001": {"guest_id": "G001", "name": "John Smith", "contact_info": "1234567890", "nationality": "American", "gender": "Male", "password": "password123"},
+            "G002": {"guest_id": "G002", "name": "Aisha Khan", "contact_info": "2345678901", "nationality": "Indian", "gender": "Female", "password": "password123"},
+            "G003": {"guest_id": "G003", "name": "Carlos Rivera", "contact_info": "3456789012", "nationality": "Mexican", "gender": "Male", "password": "password123"},
+            "G004": {"guest_id": "G004", "name": "Emily Chen", "contact_info": "4567890123", "nationality": "Chinese", "gender": "Female", "password": "password123"},
+            "G005": {"guest_id": "G005", "name": "Ravi Iyer", "contact_info": "5678901234", "nationality": "Indian", "gender": "Male", "password": "password123"},
+            "G006": {"guest_id": "G006", "name": "Sophie Martin", "contact_info": "6789012345", "nationality": "French", "gender": "Female", "password": "password123"},
+            "G007": {"guest_id": "G007", "name": "David Brown", "contact_info": "7890123456", "nationality": "American", "gender": "Male", "password": "password123"},
+            "G008": {"guest_id": "G008", "name": "Nisha Gupta", "contact_info": "8901234567", "nationality": "Indian", "gender": "Female", "password": "password123"},
         }
 
         self.reservations = {
@@ -144,12 +144,24 @@ class MockGraphStore:
 
         # A. Create Reservation
         if "CREATE (res:Reservation" in q or "CREATE (res: Reservation" in q:
-            res_id = params["res_id"]
+            res_id = params.get("res_id")
+            if not res_id:
+                max_num = 0
+                for rid in self.reservations:
+                    if rid.startswith("R") and rid[1:].isdigit():
+                        try:
+                            max_num = max(max_num, int(rid[1:]))
+                        except ValueError:
+                            pass
+                res_id = f"R{max_num + 1:03d}"
+
             rm = self._find_room(params.get("room_id"), params.get("room_no"))
             r_no = rm["room_no"] if rm else int(params.get("room_no", 0))
             r_id = rm["room_id"] if rm else f"RM{r_no}"
             c_in = str(params.get("check_in") or params.get("check_in_date"))
             c_out = str(params.get("check_out") or params.get("check_out_date"))
+            staff_id = params.get("staff_id") or "S001"
+
             self.reservations[res_id] = {
                 "res_id": res_id,
                 "check_in_date": c_in,
@@ -158,13 +170,16 @@ class MockGraphStore:
                 "guest_id": params["guest_id"],
                 "room_id": r_id,
                 "room_no": r_no,
-                "staff_id": params["staff_id"],
+                "staff_id": staff_id,
             }
             g = self.guests.get(params["guest_id"], {})
-            s = self.staff.get(params["staff_id"], {})
+            s = self.staff.get(staff_id, {})
             return [{
                 "res_id": res_id,
                 "status": "Confirmed",
+                "check_in_date": c_in,
+                "check_out_date": c_out,
+                "guest_id": params["guest_id"],
                 "guest_name": g.get("name", "Guest"),
                 "room_id": r_id,
                 "room_no": r_no,
@@ -199,17 +214,47 @@ class MockGraphStore:
             }
             return [self.staff[s_id]]
 
-        # D. Create Guest
-        if "CREATE (g:Guest" in q or "CREATE (g: Guest" in q:
-            g_id = params["guest_id"]
-            self.guests[g_id] = {
+        # D. Create / Merge Guest
+        if "SET g.password = $password" in q:
+            g_id = params.get("guest_id")
+            if g_id in self.guests:
+                self.guests[g_id]["password"] = params.get("password")
+                return [{"guest_id": g_id}]
+            return []
+
+        if ("CREATE (g:Guest" in q or "CREATE (g: Guest" in q or
+            "MERGE (g:Guest" in q or "MERGE (g: Guest" in q):
+            g_id = params.get("guest_id")
+            if not g_id:
+                max_num = 0
+                for gid in self.guests:
+                    if gid.startswith("G") and gid[1:].isdigit():
+                        try:
+                            max_num = max(max_num, int(gid[1:]))
+                        except ValueError:
+                            pass
+                g_id = f"G{max_num + 1:03d}"
+
+            if g_id not in self.guests:
+                self.guests[g_id] = {
+                    "guest_id": g_id,
+                    "name": params["name"],
+                    "contact_info": params.get("contact_info", "Not provided"),
+                    "nationality": params.get("nationality", "Indian"),
+                    "gender": params.get("gender", "Other"),
+                    "password": params.get("password", "password123"),
+                }
+            elif "password" in params and params["password"]:
+                self.guests[g_id]["password"] = params["password"]
+
+            return [{
                 "guest_id": g_id,
-                "name": params["name"],
-                "contact_info": params["contact_info"],
-                "nationality": params["nationality"],
-                "gender": params["gender"],
-            }
-            return [{"guest_id": g_id, "name": params["name"]}]
+                "name": self.guests[g_id]["name"],
+                "contact_info": self.guests[g_id]["contact_info"],
+                "nationality": self.guests[g_id]["nationality"],
+                "gender": self.guests[g_id]["gender"],
+                "password": self.guests[g_id].get("password", "password123"),
+            }]
 
         # E. Create Room
         if "CREATE (r:Room" in q or "CREATE (r: Room" in q:
@@ -466,6 +511,10 @@ class MockGraphStore:
                 c = self.categories.get(r["category_name"], {})
                 if "hotel_id" in params and params["hotel_id"] and r["hotel_id"] != params["hotel_id"]:
                     continue
+                if "location" in params and params["location"]:
+                    loc = params["location"].lower()
+                    if loc not in h.get("location", "").lower() and loc not in h.get("name", "").lower():
+                        continue
                 if "category" in params and params["category"] and r["category_name"] != params["category"]:
                     continue
                 if "status" in params and params["status"] and r["status"] != params["status"]:
@@ -486,7 +535,7 @@ class MockGraphStore:
                     if has_overlap:
                         continue
 
-                results.append({
+                item = {
                     "room_id": r.get("room_id", f"RM{r['room_no']}"),
                     "room_no": r["room_no"],
                     "status": r["status"],
@@ -495,7 +544,19 @@ class MockGraphStore:
                     "hotel_id": r["hotel_id"],
                     "hotel_name": h.get("name", "Unknown"),
                     "location": h.get("location", "Unknown"),
-                })
+                }
+                if req_in and req_out:
+                    try:
+                        d_in = date.fromisoformat(req_in)
+                        d_out = date.fromisoformat(req_out)
+                        nights = (d_out - d_in).days
+                        item["nights"] = nights
+                        item["check_in_date"] = req_in
+                        item["check_out_date"] = req_out
+                        item["estimated_total_price"] = round(c.get("rent", 0.0) * nights, 2)
+                    except Exception:
+                        pass
+                results.append(item)
             results.sort(key=lambda x: (x.get("rent", 0), x["room_no"]))
             return results
 
@@ -514,6 +575,40 @@ class MockGraphStore:
             c_name = params.get("category_name")
             return [{"c": self.categories[c_name]}] if c_name in self.categories else []
 
+        # List Guest IDs (for next-id sequence generation)
+        if ("MATCH (g:Guest) RETURN g.guest_id" in q or "MATCH (g:Guest)\n    RETURN g.guest_id" in q) or ("MATCH (g:Guest)" in q and "RETURN g.guest_id" in q and "WHERE" not in q and "MADE" not in q):
+            return [{"guest_id": g_id} for g_id in sorted(self.guests.keys())]
+
+        # List Reservation IDs (for next-id sequence generation)
+        if "MATCH (r:Reservation) RETURN r.res_id" in q or ("MATCH (r:Reservation)" in q and "RETURN r.res_id" in q and "WHERE" not in q and "BOOKS" not in q):
+            return [{"res_id": rid} for rid in sorted(self.reservations.keys())]
+
+        # Lookup Guest by contact_info, email, phone, or guest_id
+        if "MATCH (g:Guest)" in q and ("g.contact_info CONTAINS" in q or "toLower(g.contact_info)" in q):
+            c_info = (params.get("contact_info") or "").lower()
+            email = (params.get("email") or "").lower()
+            phone = (params.get("phone") or "").lower()
+            results = []
+            for g_id, g in self.guests.items():
+                g_ci = (g.get("contact_info") or "").lower()
+                matched = False
+                if email and email in g_ci:
+                    matched = True
+                elif phone and phone in g_ci:
+                    matched = True
+                elif c_info and c_info in g_ci:
+                    matched = True
+                if matched:
+                    results.append({
+                        "guest_id": g["guest_id"],
+                        "name": g["name"],
+                        "contact_info": g["contact_info"],
+                        "nationality": g["nationality"],
+                        "gender": g["gender"],
+                        "password": g.get("password", "password123"),
+                    })
+            return results
+
         # List Guests
         if "MATCH (g:Guest) OPTIONAL MATCH (g)-[:MADE]->(res:Reservation)" in q:
             results = []
@@ -529,12 +624,18 @@ class MockGraphStore:
                 })
             return results
 
-        # Search Guests
+        # Search Guests or Lookup by exact name
         if "MATCH (g:Guest)" in q and ("toLower(g.name)" in q or "toLower(g.nationality)" in q):
+            is_exact_name = "= tolower($name)" in q.lower()
             results = []
             for g_id, g in self.guests.items():
-                if "name" in params and params["name"].lower() not in g["name"].lower():
-                    continue
+                if "name" in params:
+                    if is_exact_name:
+                        if params["name"].lower() != g["name"].lower():
+                            continue
+                    else:
+                        if params["name"].lower() not in g["name"].lower():
+                            continue
                 if "nationality" in params and params["nationality"].lower() not in g["nationality"].lower():
                     continue
                 res_count = sum(1 for r in self.reservations.values() if r["guest_id"] == g_id)
@@ -544,13 +645,14 @@ class MockGraphStore:
                     "contact_info": g["contact_info"],
                     "nationality": g["nationality"],
                     "gender": g["gender"],
+                    "password": g.get("password", "password123"),
                     "reservation_count": res_count,
                 })
             results.sort(key=lambda x: x["name"])
             return results
 
         # Guest detail with history
-        if "MATCH (g:Guest {guest_id: $guest_id})" in q and "reservations" in q.lower():
+        if "MATCH (g:Guest {guest_id: $guest_id})" in q and "collect(distinct" in q.lower():
             g_id = params.get("guest_id")
             if g_id not in self.guests:
                 return []
@@ -566,14 +668,19 @@ class MockGraphStore:
                         "res_id": r["res_id"],
                         "check_in": str(r["check_in_date"]),
                         "check_out": str(r["check_out_date"]),
+                        "check_in_date": str(r["check_in_date"]),
+                        "check_out_date": str(r["check_out_date"]),
                         "status": r["status"],
                         "room_no": r["room_no"],
                         "category": rm.get("category_name", "N/A"),
                         "rent": cat.get("rent", 0.0),
                         "hotel_name": h.get("name", "N/A"),
+                        "hotel_id": h.get("hotel_id", "N/A"),
+                        "location": h.get("location", "N/A"),
                         "processed_by": st.get("name", "N/A"),
+                        "staff_name": st.get("name", "N/A"),
                     })
-            g_res.sort(key=lambda x: x["check_in"], reverse=True)
+            g_res.sort(key=lambda x: x["check_in_date"], reverse=True)
             return [{
                 "guest_id": g["guest_id"],
                 "name": g["name"],
@@ -584,10 +691,19 @@ class MockGraphStore:
             }]
 
         # Check Guest by ID
-        if "MATCH (g:Guest {guest_id: $guest_id})" in q:
+        if "MATCH (g:Guest {guest_id: $guest_id})" in q and "MADE" not in q:
             g_id = params.get("guest_id")
             if g_id in self.guests:
-                return [{"g": self.guests[g_id], "name": self.guests[g_id]["name"], "nationality": self.guests[g_id]["nationality"]}]
+                g = self.guests[g_id]
+                return [{
+                    "g": g,
+                    "guest_id": g["guest_id"],
+                    "name": g["name"],
+                    "contact_info": g["contact_info"],
+                    "nationality": g["nationality"],
+                    "gender": g["gender"],
+                    "password": g.get("password", "password123"),
+                }]
             return []
 
         # Check Staff by ID
@@ -600,11 +716,15 @@ class MockGraphStore:
             d_id = params.get("dept_id")
             return [{"d": self.departments[d_id]}] if d_id in self.departments else []
 
-        # Check Reservation status
+        # Check Reservation status and guest ownership
         if "Reservation {res_id: $res_id}" in q and "status" in q.lower():
             res_id = params.get("res_id")
             if res_id in self.reservations:
-                return [{"status": self.reservations[res_id]["status"]}]
+                r = self.reservations[res_id]
+                return [{
+                    "status": r["status"],
+                    "guest_id": r.get("guest_id"),
+                }]
             return []
 
         # Check Reservation by ID
@@ -612,10 +732,14 @@ class MockGraphStore:
             res_id = params.get("res_id")
             return [{"r": self.reservations[res_id]}] if res_id in self.reservations else []
 
-        # List Reservations
-        if "MATCH (g:Guest)-[:MADE]->(res:Reservation)-[:BOOKS]->(r:Room)" in q:
+        # List Reservations / Guest Reservations
+        if ("MATCH (g:Guest)-[:MADE]->(res:Reservation)-[:BOOKS]->(r:Room)" in q or
+            "MATCH (g:Guest {guest_id: $guest_id})-[:MADE]->(res:Reservation)-[:BOOKS]->(r:Room)" in q):
             results = []
+            target_gid = params.get("guest_id")
             for res_id, r in sorted(self.reservations.items(), key=lambda x: str(x[1]["check_in_date"]), reverse=True):
+                if target_gid and r["guest_id"] != target_gid:
+                    continue
                 g = self.guests.get(r["guest_id"], {})
                 rm = self.rooms.get(r["room_no"], {})
                 cat = self.categories.get(rm.get("category_name"), {})
@@ -629,10 +753,12 @@ class MockGraphStore:
                     "guest_id": r["guest_id"],
                     "guest_name": g.get("name", "Unknown"),
                     "room_no": r["room_no"],
+                    "room_id": r.get("room_id") or rm.get("room_id", f"RM{r['room_no']}"),
                     "category": rm.get("category_name", "N/A"),
                     "rent": cat.get("rent", 0.0),
                     "hotel_id": rm.get("hotel_id", "N/A"),
                     "hotel_name": h.get("name", "Unknown"),
+                    "location": h.get("location", "Unknown"),
                     "staff_id": r.get("staff_id", "N/A"),
                     "staff_name": st.get("name", "N/A"),
                 })

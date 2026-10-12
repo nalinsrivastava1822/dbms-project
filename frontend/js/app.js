@@ -1,6 +1,6 @@
 /**
  * App — Main application controller.
- * Handles routing, navigation, modals, toasts, and initialization.
+ * Handles routing, navigation, modals, toasts, auth, and initialization.
  */
 const App = {
     currentSection: 'dashboard',
@@ -28,6 +28,15 @@ const App = {
     },
 
     init() {
+        // --- Auth guard ---
+        if (!Auth.requireAuth()) return;
+
+        // --- Display user info in top bar ---
+        this.setupUserInfo();
+
+        // --- Filter sidebar nav by role ---
+        this.filterNavByRole();
+
         // Navigation
         document.querySelectorAll('.nav-link').forEach(link => {
             link.addEventListener('click', (e) => {
@@ -53,13 +62,68 @@ const App = {
             if (e.key === 'Escape') this.closeModal();
         });
 
+        // Logout button
+        document.getElementById('btn-logout').addEventListener('click', () => {
+            Auth.logout();
+        });
+
         // Check connection and navigate to dashboard
         this.checkConnection();
         this.navigate('dashboard');
     },
 
+    /**
+     * Show the logged-in user's name and role badge in the top bar.
+     */
+    setupUserInfo() {
+        const session = Auth.getSession();
+        if (!session) return;
+
+        const roleBadge = document.getElementById('user-role-badge');
+        const userName  = document.getElementById('user-name');
+
+        if (session.role === 'admin') {
+            roleBadge.textContent = 'ADMIN';
+            roleBadge.classList.add('role-admin');
+            userName.textContent = session.displayName || 'Administrator';
+        } else {
+            roleBadge.textContent = 'GUEST';
+            roleBadge.classList.add('role-guest');
+            userName.textContent = session.guest_id
+                ? `${session.guest_id} · ${session.displayName}`
+                : session.displayName || 'Guest';
+        }
+    },
+
+    /**
+     * Hide sidebar nav links the current role cannot access.
+     */
+    filterNavByRole() {
+        document.querySelectorAll('.nav-link').forEach(link => {
+            const section = link.dataset.section;
+            if (!Auth.canAccess(section)) {
+                link.closest('li').style.display = 'none';
+            }
+        });
+
+        if (Auth.isGuest()) {
+            this.titles.reservations = 'My Reservations';
+            this.titles.rooms = 'Smart Room Booking';
+            const resLink = document.getElementById('nav-reservations');
+            if (resLink) resLink.innerHTML = '<span class="nav-icon">📋</span> My Reservations';
+            const roomLink = document.getElementById('nav-rooms');
+            if (roomLink) roomLink.innerHTML = '<span class="nav-icon">🛏️</span> Book Rooms';
+        }
+    },
+
     navigate(section) {
         if (!this.components[section]) return;
+
+        // Role-based guard
+        if (!Auth.canAccess(section)) {
+            this.toast('You do not have access to this section', 'error');
+            return;
+        }
 
         this.currentSection = section;
         document.getElementById('page-title').textContent = this.titles[section] || section;
